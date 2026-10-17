@@ -1,0 +1,99 @@
+{
+ "response": {
+  "numFound": 309,
+  "start": 0,
+  "docs": [
+   {
+    "date": "1954-01-01T00:00:00Z",
+    "description": "\"Three gunmen, who have been hired to assassinate the President, hold a family hostage while waiting for their target. Interesting B film which focuses on psychopathic killer well-portrayed against type by Frank Sinatra.\" - noir expert Spencer Selby | Cast: Frank Sinatra, Sterling Hayden, James Glea",
+    "downloads": 738654,
+    "identifier": "suddenly",
+    "licenseurl": "http://creativecommons.org/licenses/publicdomain/",
+    "subject": [
+     "crime",
+     "drama",
+     "Frank Sinatra",
+     "Sterling Hayden",
+     "James Gleason",
+     "Nancy Gates",
+     "Kim Charney"
+    ],
+    "title": "Suddenly",
+    "year": 1954
+   },
+   {
+    "date": "1946-01-01T00:00:00Z",
+    "description": "Set Connecticut after World War II, The Stranger is a cat and mouse game between Wilson (Edward G. Robinson), a member of the Allied War Crimes Commission and Franz Kindler (Orson Welles), a Nazi who has assumed the false identity of Dr. Charles Rankin. To complete his new intelligentsia disguise, K",
+    "downloads": 662151,
+    "identifier": "TheStranger_0",
+    "licenseurl": "http://creativecommons.org/licenses/publicdomain/",
+    "subject": [
+     "Drama",
+     "Film-Noir",
+     "Mystery",
+     "Thriller",
+     "pdmovies"
+    ],
+    "title": "The Stranger",
+    "year": 1946
+   },
+   {
+    "date": "1945-01-01T00:00:00Z",
+    "description": "German director Fritz Lang is best known for the highly influential films from relatively early in his career, especially Metropolis (1927) and M (1931). But he also had a brief Hollywood heyday during the mid 1940s, when he made some of his best films. Scarlet Street has been claimed by film noir. ",
+    "downloads": 523969,
+    "identifier": "ScarletStreet",
+    "licenseurl": "http://creativecommons.org/licenses/publicdomain/",
+    "subject": [
+     "Film-Noir",
+     "Drama",
+     "Black Comedy",
+     "Fritz Lang"
+    ],
+    "title": "Scarlet Street",
+    "year": 1945
+   },
+   {
+    "date": "1949-01-01T00:00:00Z",
+    "description": "\"Wealthy businessman survives attempt by wife to have him killed, makes it look like she succeeded and starts a new life in small town as auto mechanic. Variation on idea elevated to noir importance by The Killers (1946), where victim of femme fatale tries to abandon the city and his past identity.\"",
+    "downloads": 496937,
+    "identifier": "impact",
+    "licenseurl": "http://creativecommons.org/licenses/publicdomain/",
+    "subject": "pdmovies",
+    "title": "Impact",
+    "year": 1949
+   },
+   {
+    "date": "1950-01-01T00:00:00Z",
+    "description": "An engrossing suspense film with Mickey Rooney, Peter Lorre, and Jeanne Cagney. Needing money for a date, Rooney borrows $20 from the cash register, starting a chain of events that includes car theft, burglary, and possibly murder. (Yes, that is Jack Elam in the bar scene.) Read more at the IMDB . (",
+    "downloads": 453096,
+    "identifier": "Quicksand_clear",
+    "licenseurl": "http://creativecommons.org/publicdomain/mark/1.0/",
+    "subject": [
+     "suspense",
+     "noir",
+     "crime",
+     "Mickey Rooney",
+     "Peter Lorre",
+     "Jack Elam"
+    ],
+    "title": "Quicksand",
+    "year": 1950
+   },
+   {
+    "date": "1948-01-01T00:00:00Z",
+    "description": "An atmospheric film starring Charles Russell and Mary Beth Hughes. Fritz Leiber, Sr. (father of the famous author) has a cameo as a seer or psychic. \"You're very pretty ... when those lips aren't moving.\" The IMDB entry is here. This print seems to be complete and may be of higher quality than the o",
+    "downloads": 376129,
+    "identifier": "Inner_Sanctum_movie",
+    "licenseurl": "http://creativecommons.org/publicdomain/mark/1.0/",
+    "subject": [
+     "noir",
+     "Fritz Leiber",
+     "Charles Russell",
+     "Mary Beth Hughes"
+    ],
+    "title": "Inner Sanctum",
+    "year": 1948
+   }
+  ]
+ }
+}

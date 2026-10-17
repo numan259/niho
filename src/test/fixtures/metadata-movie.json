@@ -1,0 +1,68 @@
+{
+ "metadata": {
+  "identifier": "his_girl_friday",
+  "title": "His Girl Friday",
+  "date": "1940",
+  "year": "1940",
+  "description": "Hilarious romantic comedy starring Cary Grant and Rosalind Russell.  Russell is rough and tumble reporter looking to get out of the news racket by marrying and becoming a house wife after her divorce from newspaper publisher Grant.  Just when she is about to leave town with her husband-to-be the still lovesick Grant drafts her to cover one final breaking news sensation.   \n\nAlong with plenty of la",
+  "subject": "romance;comedy",
+  "licenseurl": "http://creativecommons.org/licenses/publicdomain/",
+  "runtime": "1:31:44"
+ },
+ "files": [
+  {
+   "name": "__ia_thumb.jpg",
+   "format": "Item Tile",
+   "source": "original",
+   "size": "12290"
+  },
+  {
+   "name": "his_girl_friday.mp4",
+   "format": "h.264",
+   "length": "5504.57",
+   "title": "His Girl Friday",
+   "source": "derivative",
+   "size": "575274912"
+  },
+  {
+   "name": "his_girl_friday.mpeg",
+   "format": "MPEG2",
+   "length": "5504.14",
+   "title": "His Girl Friday",
+   "source": "original",
+   "size": "3292094468"
+  },
+  {
+   "name": "his_girl_friday.ogv",
+   "format": "Ogg Video",
+   "length": "5504.08",
+   "source": "derivative",
+   "size": "390213679"
+  },
+  {
+   "name": "his_girl_friday_512kb.mp4",
+   "format": "512Kb MPEG4",
+   "length": "5504.52",
+   "source": "derivative",
+   "size": "401207987"
+  },
+  {
+   "name": "his_girl_friday.thumbs/his_girl_friday_000001.jpg",
+   "format": "Thumbnail",
+   "source": "derivative",
+   "size": "832"
+  },
+  {
+   "name": "his_girl_friday.thumbs/his_girl_friday_000060.jpg",
+   "format": "Thumbnail",
+   "source": "derivative",
+   "size": "10352"
+  },
+  {
+   "name": "his_girl_friday.thumbs/his_girl_friday_000600.jpg",
+   "format": "Thumbnail",
+   "source": "derivative",
+   "size": "6586"
+  }
+ ]
+}
