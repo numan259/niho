@@ -7,6 +7,7 @@ import { isProvider, type TitleDetail } from '../providers'
 import { searchArchive } from '../providers/archive'
 import { needsAttribution } from '../providers/license'
 import { OPEN_MOVIES } from '../providers/openMovies'
+import { isNative } from '../native'
 import { useLibrary } from '../state/library'
 import { Artwork } from '../ui/Artwork'
 import { TitleCard } from '../ui/cards'
@@ -50,7 +51,8 @@ function TitleView({ title: t }: { title: TitleDetail }) {
   const runtime = t.kind === 'movie' ? formatRuntime(t.episodes[0]?.durationSec) : `${t.episodes.length} episodes`
 
   async function share() {
-    const url = window.location.href
+    // In the Android app the page URL is local to the device, so share the public source page.
+    const url = isNative ? t.sourcePage : window.location.href
     try {
       if (navigator.share) await navigator.share({ title: t.name, url })
       else {

@@ -112,6 +112,14 @@ describe('buildEpisodes', () => {
     expect(eps.map((e) => e.name)).toEqual(['Show 2', 'Show 10'])
   })
 
+  it('drops quality suffixes like "512kb" from names but keeps years', () => {
+    const eps = buildEpisodes('bb', [
+      { name: 'A_Song_a_Day_1936_512kb.mp4', format: '512Kb MPEG4' },
+      { name: 'Tears_720p.mp4', format: 'h.264' },
+    ])
+    expect(eps.map((e) => e.name)).toEqual(['A Song a Day 1936', 'Tears'])
+  })
+
   it('variantKey keeps episode numbers', () => {
     expect(variantKey('Bonanza s01e19.mp4')).not.toBe(variantKey('Bonanza s01e20.mp4'))
     expect(variantKey('ed_hd.mp4')).toBe(variantKey('ed_1024.mp4'))

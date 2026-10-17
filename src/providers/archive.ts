@@ -257,6 +257,6 @@ export function cleanText(v: string | undefined): string | undefined {
 }
 
 function prettifyFileName(name: string): string {
-  const base = name.split('/').pop()!.replace(/\.mp4$/i, '')
+  const base = name.split('/').pop()!.replace(/\.mp4$/i, '').replace(VARIANT_TOKENS, '')
   return base.replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim()
 }

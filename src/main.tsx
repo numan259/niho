@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client'
 import '@fontsource-variable/bricolage-grotesque/opsz.css'
 import App from './App.tsx'
 import './index.css'
+import { isNative, setupNative } from './native'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,8 +22,11 @@ const queryClient = new QueryClient({
 // that storage permanently instead of clearing it under storage pressure.
 navigator.storage?.persist?.().catch(() => undefined)
 
-// Offline app shell + installability; skipped in dev so it never serves stale modules.
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+setupNative()
+
+// Offline app shell + installability for the web build. Skipped in dev (stale modules)
+// and in the Android app, where the whole app is already bundled on the device.
+if (import.meta.env.PROD && !isNative && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => undefined)
   })

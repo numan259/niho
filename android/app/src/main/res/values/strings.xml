@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Niho</string>
+    <string name="title_activity_main">Niho</string>
+    <string name="package_name">com.numan259.niho</string>
+    <string name="custom_url_scheme">com.numan259.niho</string>
+</resources>
