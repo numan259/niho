@@ -12,7 +12,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc -b",
     "test:e2e": "playwright test",
-    "android:apk": "vite build && cap sync android && cd android && gradlew.bat assembleDebug"
+    "android:apk": "vite build && cap sync android && node scripts/android-apk.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.2",
