@@ -1,20 +1,29 @@
-import { getArchiveTitle } from './archive'
-import { getOpenMovie } from './openMovies'
-import type { Provider, TitleDetail, TitleSummary } from './types'
+import { getTitleDetail } from './tmdb'
+import type { MediaType, Source, TitleDetail, TitleSummary, Video } from './types'
 
 export * from './types'
 
-export async function getTitle(provider: Provider, id: string, signal?: AbortSignal): Promise<TitleDetail | null> {
-  if (provider === 'open') return getOpenMovie(id)
-  return getArchiveTitle(id, signal)
+export function getTitle(mediaType: MediaType, id: number, signal?: AbortSignal): Promise<TitleDetail | null> {
+  return getTitleDetail(mediaType, id, undefined, signal)
 }
 
-export function isProvider(v: string | undefined): v is Provider {
-  return v === 'archive' || v === 'open'
+export function isMediaType(v: string | undefined): v is MediaType {
+  return v === 'movie' || v === 'tv'
+}
+
+/** Route param → positive integer TMDB id, or undefined. */
+export function parseTmdbId(v: string | undefined): number | undefined {
+  const n = Number(v)
+  return Number.isInteger(n) && n > 0 ? n : undefined
 }
 
 /** Strips a detail down to what lists and local storage need. */
 export function toSummary(t: TitleSummary): TitleSummary {
-  const { key, provider, id, name, kind, year, synopsis, tags, poster, backdrop, license } = t
-  return { key, provider, id, name, kind, year, synopsis, tags, poster, backdrop, license }
+  const { key, mediaType, id, name, year, synopsis, tags, poster, backdrop, rating } = t
+  return { key, mediaType, id, name, year, synopsis, tags, poster, backdrop, rating }
+}
+
+/** TMDB videos → player sources (official YouTube embeds). */
+export function videoSources(videos: Video[]): Source[] {
+  return videos.map((v) => ({ url: v.key, type: 'youtube', quality: v.name }))
 }

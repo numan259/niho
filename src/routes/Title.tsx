@@ -1,57 +1,58 @@
-import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useTitle } from '../catalog/queries'
-import { SEARCH_COLLECTIONS } from '../catalog/rows'
-import { isProvider, type TitleDetail } from '../providers'
-import { searchArchive } from '../providers/archive'
-import { needsAttribution } from '../providers/license'
-import { OPEN_MOVIES } from '../providers/openMovies'
+import { useRecommendations, useSeason, useTitle } from '../catalog/queries'
 import { isNative } from '../native'
+import { isMediaType, parseTmdbId, type TitleDetail, type WatchAvailability, type WatchProvider } from '../providers'
 import { useLibrary } from '../state/library'
 import { Artwork } from '../ui/Artwork'
 import { TitleCard } from '../ui/cards'
-import { watchPath } from '../ui/paths'
 import { Icon } from '../ui/Icon'
 import { BackButton } from '../ui/layout'
+import { watchPath } from '../ui/paths'
 import { formatClock, formatRuntime } from '../ui/player/time'
 import { Row } from '../ui/sections/Row'
 import { ErrorMessage, Message, RowSkeleton, Spinner } from '../ui/States'
 
 export default function Title() {
-  const { provider, id } = useParams()
-  const valid = isProvider(provider)
-  const { data, error, isPending, refetch } = useTitle(valid ? provider : undefined, id)
+  const params = useParams()
+  const mediaType = isMediaType(params.mediaType) ? params.mediaType : undefined
+  const id = parseTmdbId(params.id)
+  const { data, error, isPending, refetch } = useTitle(mediaType, id)
 
-  if (!valid) return <Message title="Title not found" />
+  if (!mediaType || !id) return <Message title="Title not found" />
   if (isPending) return <Spinner />
   if (error) return <ErrorMessage error={error} onRetry={() => refetch()} />
   if (!data) {
-    return (
-      <Message title="Not available on Niho" action={<Link className="btn btn--secondary" to="/">Back to Home</Link>}>
-        This item isn’t marked public domain or Creative Commons, so Niho doesn’t show it.
-      </Message>
-    )
+    return <Message title="Title not found" action={<Link className="btn btn--secondary" to="/">Back to Home</Link>} />
   }
   return <TitleView key={data.key} title={data} />
 }
 
+type Tab = 'episodes' | 'cast' | 'more'
+
 function TitleView({ title: t }: { title: TitleDetail }) {
   const lib = useLibrary()
   const navigate = useNavigate()
-  const [tab, setTab] = useState<'episodes' | 'more'>(t.kind === 'series' ? 'episodes' : 'more')
+  const isSeries = t.mediaType === 'tv'
+  const [tab, setTab] = useState<Tab>(isSeries && t.seasons.length ? 'episodes' : 'more')
   const [expanded, setExpanded] = useState(false)
   const [shared, setShared] = useState(false)
 
   const entry = lib.progress[t.key]
-  const resumeEp = entry ? t.episodes[entry.episodeIndex] : undefined
   const inList = lib.inMyList(t.key)
   const liked = lib.isLiked(t.key)
-  const playable = t.episodes.length > 0
-  const runtime = t.kind === 'movie' ? formatRuntime(t.episodes[0]?.durationSec) : `${t.episodes.length} episodes`
+  const hasTrailer = t.videos.length > 0
+  const resumeEp = entry?.season !== undefined ? { season: entry.season, episode: entry.episodeIndex + 1 } : undefined
+  const play = () => navigate(watchPath(t, resumeEp))
+
+  const runtime = isSeries
+    ? t.seasons.length
+      ? `${t.seasons.length} season${t.seasons.length > 1 ? 's' : ''}`
+      : undefined
+    : formatRuntime(t.runtimeMin ? t.runtimeMin * 60 : undefined)
 
   async function share() {
-    // In the Android app the page URL is local to the device, so share the public source page.
+    // In the Android app the page URL is local to the device, so share the public TMDB page.
     const url = isNative ? t.sourcePage : window.location.href
     try {
       if (navigator.share) await navigator.share({ title: t.name, url })
@@ -72,8 +73,8 @@ function TitleView({ title: t }: { title: TitleDetail }) {
         <div className="title-page__back">
           <BackButton />
         </div>
-        {playable && (
-          <button className="title-page__hero-play" onClick={() => navigate(watchPath(t, entry?.episodeIndex ?? 0))} aria-label={`Play ${t.name}`}>
+        {hasTrailer && (
+          <button className="title-page__hero-play" onClick={play} aria-label={`Play trailer for ${t.name}`}>
             <Icon name="play" size={34} />
           </button>
         )}
@@ -81,19 +82,23 @@ function TitleView({ title: t }: { title: TitleDetail }) {
 
       <div className="title-page__body">
         <h1 className="title-page__name">{t.name}</h1>
+        {t.tagline && <p className="title-page__tagline">{t.tagline}</p>}
         <p className="title-page__meta">
           {t.year && <span>{t.year}</span>}
           {runtime && <span>{runtime}</span>}
-          <a className="badge" href={t.license.url} target="_blank" rel="noreferrer" title="View license">
-            {t.license.label}
-          </a>
+          {t.certification && <span className="badge">{t.certification}</span>}
+          {t.rating && (
+            <span className="rating" aria-label={`TMDB user score ${t.rating} out of 10`}>
+              <span aria-hidden="true">★</span> {t.rating}
+            </span>
+          )}
         </p>
 
-        {playable ? (
+        {hasTrailer ? (
           <div className="title-page__primary">
-            <button className="btn btn--primary btn--block" onClick={() => navigate(watchPath(t, entry?.episodeIndex ?? 0))}>
+            <button className="btn btn--primary btn--block" onClick={play}>
               <Icon name="play" size={22} />
-              {entry && !entry.upNext ? 'Resume' : entry?.upNext ? `Play episode ${entry.episodeIndex + 1}` : 'Play'}
+              {entry && !entry.upNext ? 'Resume trailer' : 'Play trailer'}
             </button>
             {entry && !entry.upNext && entry.duration > 0 && (
               <div className="title-page__resume">
@@ -101,20 +106,14 @@ function TitleView({ title: t }: { title: TitleDetail }) {
                   <span style={{ width: `${(entry.position / entry.duration) * 100}%` }} />
                 </span>
                 <span>
-                  {t.kind === 'series' && resumeEp ? `E${entry.episodeIndex + 1} · ` : ''}
+                  {resumeEp ? `S${resumeEp.season}:E${resumeEp.episode} · ` : ''}
                   {formatClock(entry.position)} of {formatClock(entry.duration)}
                 </span>
               </div>
             )}
           </div>
         ) : (
-          <Message title="No playable video">
-            This item has no browser‑playable file. You can still watch it on the{' '}
-            <a href={t.sourcePage} target="_blank" rel="noreferrer">
-              source site
-            </a>
-            .
-          </Message>
+          <p className="title-page__note">No trailer is listed for this title yet.</p>
         )}
 
         {t.synopsis && (
@@ -125,6 +124,11 @@ function TitleView({ title: t }: { title: TitleDetail }) {
                 {expanded ? 'less' : 'more'}
               </button>
             )}
+          </p>
+        )}
+        {t.makers.length > 0 && (
+          <p className="title-page__credits">
+            <span>{isSeries ? 'Created by' : 'Directed by'}</span> {t.makers.join(', ')}
           </p>
         )}
         {t.tags.length > 0 && <p className="title-page__tags">{t.tags.join('  •  ')}</p>}
@@ -144,14 +148,21 @@ function TitleView({ title: t }: { title: TitleDetail }) {
           </button>
           <a className="action" href={t.sourcePage} target="_blank" rel="noreferrer">
             <Icon name="external" size={26} />
-            <span>Source</span>
+            <span>TMDB</span>
           </a>
         </div>
 
+        <WhereToWatch watch={t.watch} />
+
         <div className="tabs" role="tablist">
-          {t.kind === 'series' && (
+          {isSeries && t.seasons.length > 0 && (
             <button role="tab" aria-selected={tab === 'episodes'} className="tabs__tab" onClick={() => setTab('episodes')}>
               Episodes
+            </button>
+          )}
+          {t.cast.length > 0 && (
+            <button role="tab" aria-selected={tab === 'cast'} className="tabs__tab" onClick={() => setTab('cast')}>
+              Cast
             </button>
           )}
           <button role="tab" aria-selected={tab === 'more'} className="tabs__tab" onClick={() => setTab('more')}>
@@ -159,72 +170,145 @@ function TitleView({ title: t }: { title: TitleDetail }) {
           </button>
         </div>
 
-        {tab === 'episodes' && t.kind === 'series' ? (
-          <ol className="episodes">
-            {t.episodes.map((ep) => {
-              const current = entry?.episodeIndex === ep.index && !entry.upNext && entry.duration > 0
-              return (
-                <li key={ep.index}>
-                  <Link className="episode" to={watchPath(t, ep.index)} aria-label={`Play episode ${ep.index + 1}: ${ep.name}`}>
-                    <span className="episode__num">{ep.index + 1}</span>
-                    <span className="episode__text">
-                      <span className="episode__name">{ep.name}</span>
-                      <span className="episode__sub">
-                        {ep.season && ep.number ? `S${ep.season}:E${ep.number} · ` : ''}
-                        {formatRuntime(ep.durationSec) ?? ''}
-                      </span>
-                      {current && (
-                        <span className="progress">
-                          <span style={{ width: `${(entry.position / entry.duration) * 100}%` }} />
-                        </span>
-                      )}
-                    </span>
-                    <Icon name="play" size={20} />
-                  </Link>
-                </li>
-              )
-            })}
-          </ol>
-        ) : (
-          <MoreLikeThis title={t} />
-        )}
+        {tab === 'episodes' && isSeries ? <Episodes title={t} /> : tab === 'cast' ? <Cast title={t} /> : <MoreLikeThis title={t} />}
 
-        <section className="about-title">
-          <h2>About this title</h2>
-          <p>
-            <strong>License:</strong>{' '}
-            <a href={t.license.url} target="_blank" rel="noreferrer">
-              {t.license.label}
-            </a>
-            {needsAttribution(t.license) && t.credit && <> — {t.credit}</>}
-          </p>
-          <p>
-            <strong>Source:</strong>{' '}
-            <a href={t.sourcePage} target="_blank" rel="noreferrer">
-              {new URL(t.sourcePage).hostname}
-            </a>
-          </p>
-          <p className="about-title__note">License information is provided by the uploader on the source site.</p>
-        </section>
+        <p className="attribution">
+          Metadata and images from{' '}
+          <a href={t.sourcePage} target="_blank" rel="noreferrer">
+            TMDB
+          </a>
+          . Trailers play from YouTube.
+        </p>
       </div>
     </div>
   )
 }
 
+const regionNames = typeof Intl.DisplayNames === 'function' ? new Intl.DisplayNames(['en'], { type: 'region' }) : null
+
+function WhereToWatch({ watch }: { watch?: WatchAvailability }) {
+  const groups: [string, WatchProvider[]][] = watch
+    ? ([
+        ['Stream', watch.stream],
+        ['Free', watch.free],
+        ['Rent', watch.rent],
+        ['Buy', watch.buy],
+      ] as [string, WatchProvider[]][]).filter(([, list]) => list.length > 0)
+    : []
+  const region = watch ? (regionNames?.of(watch.region) ?? watch.region) : 'your country'
+
+  return (
+    <section className="where" aria-labelledby="where-title">
+      <h2 id="where-title" className="where__title">
+        Where to watch
+      </h2>
+      {groups.length === 0 ? (
+        <p className="where__empty">Not available to stream, rent or buy in {region} right now.</p>
+      ) : (
+        groups.map(([label, providers]) => (
+          <div key={label} className="where__group">
+            <span className="where__label">{label}</span>
+            <ul className="where__providers">
+              {providers.map((p) => (
+                <li key={p.id}>
+                  <a className="provider" href={watch?.link} target="_blank" rel="noreferrer" title={p.name} aria-label={`${label} on ${p.name}`}>
+                    {p.logo ? <img src={p.logo} alt="" loading="lazy" /> : <span>{p.name.charAt(0)}</span>}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))
+      )}
+      <p className="where__source">
+        Availability in {region}. Data by{' '}
+        <a href="https://www.justwatch.com" target="_blank" rel="noreferrer">
+          JustWatch
+        </a>
+        .
+      </p>
+    </section>
+  )
+}
+
+function Episodes({ title: t }: { title: TitleDetail }) {
+  const lib = useLibrary()
+  const entry = lib.progress[t.key]
+  const [season, setSeason] = useState(entry?.season ?? t.seasons[0]?.number)
+  const { data, isPending, error, refetch } = useSeason(t.id, season)
+
+  return (
+    <div className="episodes-panel">
+      {t.seasons.length > 1 && (
+        <label className="select">
+          <span className="visually-hidden">Season</span>
+          <select value={season} onChange={(e) => setSeason(Number(e.target.value))}>
+            {t.seasons.map((s) => (
+              <option key={s.number} value={s.number}>
+                {s.name} ({s.episodeCount} episodes)
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {isPending ? (
+        <Spinner />
+      ) : error ? (
+        <ErrorMessage error={error} onRetry={() => refetch()} />
+      ) : (
+        <ol className="episodes">
+          {data.map((ep) => {
+            const current = entry?.season === ep.season && entry.episodeIndex === ep.number - 1 && !entry.upNext && entry.duration > 0
+            return (
+              <li key={ep.number}>
+                <Link className="episode" to={watchPath(t, { season: ep.season, episode: ep.number })} aria-label={`Play preview for episode ${ep.number}: ${ep.name}`}>
+                  <Artwork src={ep.still} title={`E${ep.number}`} className="episode__still" />
+                  <span className="episode__text">
+                    <span className="episode__name">
+                      {ep.number}. {ep.name}
+                    </span>
+                    <span className="episode__sub">
+                      S{ep.season}:E{ep.number}
+                      {ep.runtimeMin ? ` · ${ep.runtimeMin} min` : ''}
+                    </span>
+                    {ep.overview && <span className="episode__overview">{ep.overview}</span>}
+                    {current && (
+                      <span className="progress">
+                        <span style={{ width: `${(entry.position / entry.duration) * 100}%` }} />
+                      </span>
+                    )}
+                  </span>
+                  <Icon name="play" size={20} />
+                </Link>
+              </li>
+            )
+          })}
+        </ol>
+      )}
+    </div>
+  )
+}
+
+function Cast({ title: t }: { title: TitleDetail }) {
+  return (
+    <ul className="cast">
+      {t.cast.map((c) => (
+        <li key={c.id} className="cast__item">
+          <Artwork src={c.photo} title={c.name.split(' ').map((w) => w[0]).join('').slice(0, 2)} className="cast__photo" />
+          <span className="cast__name">{c.name}</span>
+          {c.character && <span className="cast__role">{c.character}</span>}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function MoreLikeThis({ title }: { title: TitleDetail }) {
-  const tag = title.tags[0]
-  const q = useQuery({
-    queryKey: ['similar', title.key, tag],
-    queryFn: ({ signal }) =>
-      title.provider === 'open'
-        ? Promise.resolve(OPEN_MOVIES.filter((m) => m.key !== title.key))
-        : searchArchive({ collections: SEARCH_COLLECTIONS, text: tag ?? title.name.split(' ')[0], rows: 16 }, signal).then((p) =>
-            p.items.filter((i) => i.key !== title.key),
-          ),
-  })
+  const { data, isPending } = useRecommendations(title.mediaType, title.id)
+  if (!isPending && !data?.length) return <p className="title-page__note">No recommendations yet.</p>
   return (
     <Row title="More Like This">
-      {q.isPending ? <RowSkeleton /> : (q.data ?? []).map((t) => <TitleCard key={t.key} title={t} />)}
+      {isPending ? <RowSkeleton /> : data!.map((t) => <TitleCard key={t.key} title={t} />)}
     </Row>
   )
 }

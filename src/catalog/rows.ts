@@ -1,15 +1,14 @@
-import type { TitleKind } from '../providers'
+import type { ListSource } from '../providers/tmdb'
 
 export type Category = 'all' | 'movies' | 'series'
 
-/** A row backed by a set of Internet Archive collections (or the curated open movies). */
+/** A home-page row backed by a TMDB list. */
 export interface RowDef {
   id: string
   title: string
-  /** Archive collections; empty for the curated "open" row */
-  collections: string[]
-  kind?: TitleKind
-  category: Exclude<Category, 'all'>
+  source: ListSource
+  /** mixed rows (movies + series) only show on the unfiltered home page */
+  category: 'movies' | 'series' | 'mixed'
   /** Shown on kids profiles */
   kids?: boolean
   /** Shown as a genre chip in the chip bar */
@@ -17,22 +16,42 @@ export interface RowDef {
 }
 
 export const ROWS: RowDef[] = [
-  { id: 'open', title: 'Niho Open Originals', collections: [], category: 'movies', kids: true },
-  { id: 'films', title: 'Popular Classic Films', collections: ['feature_films'], category: 'movies' },
-  { id: 'tv', title: 'Classic TV Series', collections: ['classic_tv'], kind: 'series', category: 'series' },
-  { id: 'noir', title: 'Film Noir', collections: ['Film_Noir'], category: 'movies', chip: 'Noir' },
-  { id: 'scifi', title: 'Sci‑Fi & Horror', collections: ['SciFi_Horror'], category: 'movies', chip: 'Sci‑Fi & Horror' },
-  { id: 'comedy', title: 'Comedy Classics', collections: ['Comedy_Films'], category: 'movies', chip: 'Comedy' },
-  { id: 'cartoons', title: 'Cartoons', collections: ['classic_cartoons'], category: 'movies', kids: true, chip: 'Cartoons' },
+  { id: 'trending', title: 'Trending This Week', source: { kind: 'trending', media: 'all' }, category: 'mixed' },
+  { id: 'popular-movies', title: 'Popular Movies', source: { kind: 'popular', media: 'movie' }, category: 'movies' },
+  { id: 'popular-tv', title: 'Popular Series', source: { kind: 'popular', media: 'tv' }, category: 'series' },
+  { id: 'top-movies', title: 'Top Rated Movies', source: { kind: 'top_rated', media: 'movie' }, category: 'movies' },
+  { id: 'top-tv', title: 'Top Rated Series', source: { kind: 'top_rated', media: 'tv' }, category: 'series' },
+  { id: 'action', title: 'Action & Adventure', source: { kind: 'discover', media: 'movie', genres: [28, 12] }, category: 'movies', chip: 'Action' },
+  { id: 'comedy', title: 'Comedies', source: { kind: 'discover', media: 'movie', genres: [35] }, category: 'movies', chip: 'Comedy' },
+  { id: 'scifi', title: 'Sci‑Fi & Fantasy', source: { kind: 'discover', media: 'movie', genres: [878, 14] }, category: 'movies', chip: 'Sci‑Fi' },
+  { id: 'horror', title: 'Horror', source: { kind: 'discover', media: 'movie', genres: [27] }, category: 'movies', chip: 'Horror' },
+  { id: 'crime-tv', title: 'Crime Series', source: { kind: 'discover', media: 'tv', genres: [80] }, category: 'series', chip: 'Crime' },
+  {
+    id: 'animation',
+    title: 'Animated Movies',
+    source: { kind: 'discover', media: 'movie', genres: [16], kidsSafe: true },
+    category: 'movies',
+    kids: true,
+    chip: 'Animation',
+  },
+  {
+    id: 'family',
+    title: 'Family Movies',
+    source: { kind: 'discover', media: 'movie', genres: [10751], kidsSafe: true },
+    category: 'movies',
+    kids: true,
+  },
+  { id: 'kids-tv', title: 'Kids’ Series', source: { kind: 'discover', media: 'tv', genres: [10762] }, category: 'series', kids: true, chip: 'Kids' },
 ]
-
-export const SEARCH_COLLECTIONS = [...new Set(ROWS.flatMap((r) => r.collections))]
-export const KIDS_COLLECTIONS = [...new Set(ROWS.filter((r) => r.kids).flatMap((r) => r.collections))]
 
 export function getRow(id: string | undefined): RowDef | undefined {
   return ROWS.find((r) => r.id === id)
 }
 
 export function rowsFor({ kids, category }: { kids: boolean; category: Category }): RowDef[] {
-  return ROWS.filter((r) => (!kids || r.kids) && (category === 'all' || r.category === category))
+  return ROWS.filter((r) => {
+    if (kids && !r.kids) return false
+    if (category === 'all') return true
+    return r.category === category
+  })
 }

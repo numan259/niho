@@ -8,6 +8,9 @@ import { persistStorage } from './storage'
 
 export interface ProgressEntry {
   title: TitleSummary
+  /** TMDB season number (series only) */
+  season?: number
+  /** Episode position within the season (0-based); 0 for movies and show trailers */
   episodeIndex: number
   episodeCount: number
   episodeLabel?: string
@@ -35,6 +38,7 @@ export const FINISHED_RATIO = 0.95
 
 export interface ProgressUpdate {
   title: TitleSummary
+  season?: number
   episodeIndex: number
   episodeCount: number
   episodeLabel?: string
@@ -53,6 +57,7 @@ export function applyProgress(progress: ProfileLibrary['progress'], u: ProgressU
   if (!finished) {
     next[title.key] = {
       title,
+      season: u.season,
       episodeIndex: u.episodeIndex,
       episodeCount: u.episodeCount,
       episodeLabel: u.episodeLabel,
@@ -63,6 +68,7 @@ export function applyProgress(progress: ProfileLibrary['progress'], u: ProgressU
   } else if (u.episodeIndex + 1 < u.episodeCount) {
     next[title.key] = {
       title,
+      season: u.season,
       episodeIndex: u.episodeIndex + 1,
       episodeCount: u.episodeCount,
       position: 0,
@@ -140,7 +146,13 @@ export const useLibraryStore = create<LibraryState>()(
           }),
       }
     },
-    { name: 'niho.library', storage: persistStorage, version: 1 },
+    {
+      name: 'niho.library',
+      storage: persistStorage,
+      // v2 = TMDB ids. v1 held Internet Archive ids that no longer resolve, so start fresh.
+      version: 2,
+      migrate: () => ({ libraries: {} }) as unknown as LibraryState,
+    },
   ),
 )
 

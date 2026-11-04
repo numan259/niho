@@ -1,0 +1,30 @@
+{
+  "id": 1396,
+  "name": "Breaking Bad",
+  "first_air_date": "2008-01-20",
+  "overview": "A chemistry teacher takes a dangerous turn after a diagnosis.",
+  "episode_run_time": [47],
+  "genres": [
+    { "id": 18, "name": "Drama" },
+    { "id": 80, "name": "Crime" }
+  ],
+  "poster_path": "/sample-bb-poster.jpg",
+  "backdrop_path": "/sample-bb-backdrop.jpg",
+  "vote_average": 8.9,
+  "created_by": [{ "name": "Show Creator" }],
+  "seasons": [
+    { "season_number": 0, "name": "Specials", "episode_count": 9, "air_date": "2009-02-17" },
+    { "season_number": 2, "name": "Season 2", "episode_count": 13, "air_date": "2009-03-08" },
+    { "season_number": 1, "name": "Season 1", "episode_count": 7, "air_date": "2008-01-20" },
+    { "season_number": 3, "name": "Season 3", "episode_count": 0, "air_date": null }
+  ],
+  "credits": { "cast": [{ "id": 17419, "name": "Lead Actor", "character": "Walter", "profile_path": "/sample-w.jpg", "order": 0 }] },
+  "videos": { "results": [{ "key": "show-trailer", "site": "YouTube", "name": "Series Trailer", "type": "Trailer", "official": true }] },
+  "watch/providers": { "results": {} },
+  "content_ratings": {
+    "results": [
+      { "iso_3166_1": "US", "rating": "TV-MA" },
+      { "iso_3166_1": "DE", "rating": "16" }
+    ]
+  }
+}

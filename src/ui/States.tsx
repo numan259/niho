@@ -49,7 +49,17 @@ export function ErrorMessage({ error, onRetry }: { error: unknown; onRetry?: () 
         )
       }
     >
-      {text} The Internet Archive can be slow at times — retrying usually works.
+      {text}
+    </Message>
+  )
+}
+
+/** Shown instead of the catalogue when no TMDB key is configured. */
+export function KeyMissing() {
+  return (
+    <Message title="Connect Niho to TMDB">
+      Niho needs a free TMDB API key. Copy <code>.env.example</code> to <code>.env.local</code>, paste your key after{' '}
+      <code>VITE_TMDB_API_KEY=</code>, then restart <code>npm run dev</code>.
     </Message>
   )
 }

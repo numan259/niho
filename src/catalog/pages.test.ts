@@ -13,13 +13,19 @@ describe('buildHomePage', () => {
   it('only shows kids rows on a kids profile', () => {
     const page = buildHomePage({ profileName: 'Kids', kids: true, category: 'all' })
     const rowIds = page.flatMap((s) => (s.variant === 'carousel' ? [s.row.id] : []))
-    expect(rowIds).toEqual(['open', 'cartoons'])
+    expect(rowIds).toEqual(['animation', 'family', 'kids-tv'])
+    expect(page[0]).toMatchObject({ variant: 'billboard', row: { id: 'animation' } })
   })
 
-  it('filters rows by category chip', () => {
+  it('features trending on the unfiltered home page', () => {
+    const page = buildHomePage({ profileName: 'Sam', kids: false, category: 'all' })
+    expect(page[0]).toMatchObject({ variant: 'billboard', row: { id: 'trending' } })
+  })
+
+  it('filters rows by category chip and drops mixed rows', () => {
     const page = buildHomePage({ profileName: 'Sam', kids: false, category: 'series' })
     const rowIds = page.flatMap((s) => (s.variant === 'carousel' ? [s.row.id] : []))
-    expect(rowIds).toEqual(['tv'])
-    expect(page[0]).toMatchObject({ variant: 'billboard', row: { id: 'tv' } })
+    expect(rowIds).toEqual(['popular-tv', 'top-tv', 'crime-tv', 'kids-tv'])
+    expect(page[0]).toMatchObject({ variant: 'billboard', row: { id: 'popular-tv' } })
   })
 })

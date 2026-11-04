@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom'
 import { useBrowse } from '../catalog/queries'
 import { getRow } from '../catalog/rows'
+import { mergePages } from '../providers/tmdb'
 import { Gallery } from '../ui/Gallery'
 import { BackButton } from '../ui/layout'
 import { ErrorMessage, Message, Spinner } from '../ui/States'
@@ -13,7 +14,7 @@ export default function Browse() {
 
 function BrowseRow({ row }: { row: NonNullable<ReturnType<typeof getRow>> }) {
   const q = useBrowse(row)
-  const items = q.data?.pages.flatMap((p) => p.items) ?? []
+  const items = mergePages(q.data?.pages)
   const total = q.data?.pages[0]?.total
   return (
     <div className="page">

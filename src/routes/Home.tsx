@@ -1,7 +1,9 @@
 import { Link, useSearchParams } from 'react-router-dom'
 import { buildHomePage } from '../catalog/pages'
 import type { Category } from '../catalog/rows'
+import { hasTmdbKey } from '../providers/tmdb'
 import { useActiveProfile } from '../state/profiles'
+import { KeyMissing } from '../ui/States'
 import { ChipBar, TopBar } from '../ui/layout'
 import { SectionRenderer } from '../ui/sections/Sections'
 
@@ -23,11 +25,10 @@ export default function Home() {
           onCategory={(c) => setParams(c === 'all' ? {} : { c }, { replace: true })}
         />
       </TopBar>
-      {sections.map((s) => (
-        <SectionRenderer key={`${category}-${s.id}`} section={s} />
-      ))}
+      {hasTmdbKey ? sections.map((s) => <SectionRenderer key={`${category}-${s.id}`} section={s} />) : <KeyMissing />}
       <footer className="home__footer">
-        Every title on Niho is public domain or Creative Commons licensed. <Link to="/about">Sources &amp; credits</Link>
+        <img src="/tmdb-logo.svg" alt="TMDB" width="90" height="12" /> Film data from TMDB · availability from JustWatch ·
+        trailers via YouTube. <Link to="/about">About &amp; credits</Link>
       </footer>
     </div>
   )

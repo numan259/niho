@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useRow, useSearch } from '../catalog/queries'
-import { getRow, KIDS_COLLECTIONS, SEARCH_COLLECTIONS } from '../catalog/rows'
+import { getRow } from '../catalog/rows'
+import { IMAGE_SIZES, mergePages, resizeImage } from '../providers/tmdb'
 import { useActiveProfile } from '../state/profiles'
 import { Artwork } from '../ui/Artwork'
 import { titlePath, watchPath } from '../ui/paths'
@@ -42,9 +43,8 @@ export default function Search() {
     return () => window.clearTimeout(id)
   }, [text, setParams])
 
-  const collections = profile.kids ? KIDS_COLLECTIONS : SEARCH_COLLECTIONS
-  const q = useSearch(debounced, collections)
-  const items = q.data?.pages.flatMap((p) => p.items) ?? []
+  const q = useSearch(debounced, profile.kids)
+  const items = mergePages(q.data?.pages)
   const active = debounced.trim().length >= 2
 
   /** Remember a search once the user acts on it (submits or opens a result). */
@@ -71,7 +71,7 @@ export default function Search() {
           type="search"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={profile.kids ? 'Search cartoons' : 'Search films, series, genres…'}
+          placeholder={profile.kids ? 'Search cartoons & family films' : 'Search movies and series'}
           aria-label="Search"
           autoFocus
           enterKeyHint="search"
@@ -105,7 +105,7 @@ export default function Search() {
         <ErrorMessage error={q.error} onRetry={() => q.refetch()} />
       ) : items.length === 0 ? (
         <Message title="Nothing found">
-          Try another title, genre or year — e.g. “noir”, “western”, “1950”.
+          Check the spelling, or try another title.
         </Message>
       ) : (
         <div onClickCapture={remember}>
@@ -117,21 +117,21 @@ export default function Search() {
   )
 }
 
-/** Empty-state list: popular titles with a direct play button. */
+/** Empty-state list: trending titles with a direct trailer button. */
 function Recommended({ kids }: { kids: boolean }) {
-  const { data, isPending } = useRow(getRow(kids ? 'cartoons' : 'films')!)
+  const { data, isPending } = useRow(getRow(kids ? 'animation' : 'trending')!)
   if (isPending) return <Spinner />
   return (
     <section>
-      <h2 className="section-title">Recommended</h2>
+      <h2 className="section-title">{kids ? 'Popular with kids' : 'Trending this week'}</h2>
       <ul className="list">
         {(data?.items ?? []).slice(0, 10).map((t) => (
           <li key={t.key} className="list__item">
             <Link to={titlePath(t)} className="list__link">
-              <Artwork src={t.poster} title={t.name} className="list__art" />
+              <Artwork src={resizeImage(t.backdrop, IMAGE_SIZES.thumb) ?? t.poster} title={t.name} className="list__art" />
               <span className="list__name">{t.name}</span>
             </Link>
-            <Link to={watchPath(t)} className="icon-btn list__play" aria-label={`Play ${t.name}`}>
+            <Link to={watchPath(t)} className="icon-btn list__play" aria-label={`Play trailer for ${t.name}`}>
               <Icon name="play" />
             </Link>
           </li>

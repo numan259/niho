@@ -20,7 +20,8 @@ export interface PageContext {
 export function buildHomePage({ profileName, kids, category }: PageContext): Section[] {
   const rows = rowsFor({ kids, category })
   if (rows.length === 0) return []
-  const featured = kids ? rows[0] : (rows.find((r) => r.id === (category === 'series' ? 'tv' : 'open')) ?? rows[0])
+  const featuredId = kids ? 'animation' : category === 'series' ? 'popular-tv' : category === 'movies' ? 'popular-movies' : 'trending'
+  const featured = rows.find((r) => r.id === featuredId) ?? rows[0]
 
   const sections: Section[] = [{ id: 'billboard', variant: 'billboard', row: featured }]
   sections.push({ id: 'continue', variant: 'continue', title: `Continue Watching for ${profileName}` })

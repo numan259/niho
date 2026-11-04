@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { TitleSummary } from '../providers'
+import { IMAGE_SIZES, resizeImage } from '../providers/tmdb'
 import { remainingLabel, type ProgressEntry } from '../state/library'
 import { Artwork } from './Artwork'
 import { Icon } from './Icon'
@@ -17,11 +18,12 @@ export function ContinueCard({ entry, onRemove }: { entry: ProgressEntry; onRemo
   const { title } = entry
   const pct = entry.duration ? Math.min(100, (entry.position / entry.duration) * 100) : 0
   const remaining = remainingLabel(entry)
-  const episode = entry.episodeCount > 1 ? `Episode ${entry.episodeIndex + 1}` : null
+  const ep = entry.season !== undefined ? { season: entry.season, episode: entry.episodeIndex + 1 } : undefined
+  const episode = ep ? `S${ep.season}:E${ep.episode}` : null
   return (
     <div className="card card--wide">
-      <Link to={watchPath(title, entry.episodeIndex)} className="card__play" aria-label={`Play ${title.name}, ${remaining}`}>
-        <Artwork src={title.backdrop ?? title.poster} title={title.name} className="card__art" />
+      <Link to={watchPath(title, ep)} className="card__play" aria-label={`Play ${title.name}, ${remaining}`}>
+        <Artwork src={resizeImage(title.backdrop, IMAGE_SIZES.thumb) ?? title.poster} title={title.name} className="card__art" />
         <span className="card__play-icon" aria-hidden="true">
           <Icon name="play" size={22} />
         </span>

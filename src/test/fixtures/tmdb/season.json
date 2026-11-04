@@ -1,0 +1,8 @@
+{
+  "season_number": 1,
+  "episodes": [
+    { "episode_number": 2, "season_number": 1, "name": "Second Episode", "overview": "Things escalate.", "still_path": "/sample-s1e2.jpg", "runtime": 48, "air_date": "2008-01-27" },
+    { "episode_number": 1, "season_number": 1, "name": "Pilot", "overview": "It begins.", "still_path": null, "runtime": 58, "air_date": "2008-01-20" },
+    { "episode_number": 3, "season_number": 1, "name": "", "overview": "", "still_path": null, "runtime": null, "air_date": null }
+  ]
+}

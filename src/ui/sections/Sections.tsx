@@ -33,7 +33,7 @@ export function Carousel({ row }: { row: RowDef }) {
     )
   }
   return (
-    <Row title={row.title} seeAll={row.collections.length ? `/browse/${row.id}` : undefined}>
+    <Row title={row.title} seeAll={`/browse/${row.id}`}>
       {isPending ? <RowSkeleton /> : data.items.map((t) => <TitleCard key={t.key} title={t} />)}
     </Row>
   )
@@ -74,7 +74,7 @@ function dailyPick<T>(items: T[]): T | undefined {
 function Billboard({ row }: { row: RowDef }) {
   const { data } = useRow(row)
   const pick = data ? dailyPick(data.items) : undefined
-  const { data: detail } = useTitle(pick?.provider, pick?.id)
+  const { data: detail } = useTitle(pick?.mediaType, pick?.id)
   const lib = useLibrary()
   const navigate = useNavigate()
 
@@ -85,18 +85,18 @@ function Billboard({ row }: { row: RowDef }) {
   return (
     <section className="billboard" aria-label={`Featured: ${t.name}`}>
       <Link to={titlePath(t)} className="billboard__art" aria-label={`Show details for ${t.name}`}>
-        {/* Portrait card on phones uses the poster; the wide desktop banner uses a film frame. */}
+        {/* Portrait card on phones uses the poster; the wide desktop banner uses the backdrop. */}
         <Artwork src={t.poster} title={t.name} className="billboard__img billboard__img--portrait" priority />
         <Artwork src={t.backdrop ?? t.poster} title={t.name} className="billboard__img billboard__img--wide" />
       </Link>
       <div className="billboard__content">
         <h1 className="billboard__title">{t.name}</h1>
         <p className="billboard__tags">
-          {[t.kind === 'series' ? 'Series' : 'Film', t.year, ...t.tags.slice(0, 3)].filter(Boolean).join('  •  ')}
+          {[t.mediaType === 'tv' ? 'Series' : 'Film', t.year, t.rating && `★ ${t.rating}`, ...t.tags.slice(0, 2)].filter(Boolean).join('  •  ')}
         </p>
         <div className="billboard__ctas">
           <button className="btn btn--primary" onClick={() => navigate(watchPath(t))}>
-            <Icon name="play" size={20} /> Play
+            <Icon name="play" size={20} /> Trailer
           </button>
           <button className="btn btn--secondary" onClick={() => lib.toggleMyList(t)} aria-pressed={inList}>
             <Icon name={inList ? 'check' : 'plus'} size={20} /> My List

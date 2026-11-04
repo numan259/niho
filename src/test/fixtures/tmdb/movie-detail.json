@@ -1,0 +1,66 @@
+{
+  "id": 27205,
+  "title": "Inception",
+  "release_date": "2010-07-15",
+  "overview": "A thief who steals secrets through dreams is offered one last job.",
+  "tagline": "Your mind is the scene of the crime.",
+  "runtime": 148,
+  "genres": [
+    { "id": 28, "name": "Action" },
+    { "id": 878, "name": "Science Fiction" },
+    { "id": 12, "name": "Adventure" }
+  ],
+  "poster_path": "/sample-inception-poster.jpg",
+  "backdrop_path": "/sample-inception-backdrop.jpg",
+  "vote_average": 8.369,
+  "adult": false,
+  "credits": {
+    "cast": [
+      { "id": 3, "name": "Second Billed", "character": "Arthur", "profile_path": null, "order": 1 },
+      { "id": 2, "name": "Lead Actor", "character": "Cobb", "profile_path": "/sample-lead.jpg", "order": 0 }
+    ],
+    "crew": [
+      { "job": "Producer", "name": "A Producer" },
+      { "job": "Director", "name": "The Director" },
+      { "job": "Director", "name": "The Director" }
+    ]
+  },
+  "videos": {
+    "results": [
+      { "key": "teaser-key", "site": "YouTube", "name": "Teaser", "type": "Teaser", "official": true, "size": 1080, "published_at": "2010-01-01T00:00:00.000Z" },
+      { "key": "fan-trailer", "site": "YouTube", "name": "Fan Trailer", "type": "Trailer", "official": false, "size": 1080, "published_at": "2010-03-01T00:00:00.000Z" },
+      { "key": "vimeo-key", "site": "Vimeo", "name": "Vimeo Trailer", "type": "Trailer", "official": true },
+      { "key": "official-trailer", "site": "YouTube", "name": "Official Trailer", "type": "Trailer", "official": true, "size": 1080, "published_at": "2010-05-01T00:00:00.000Z" },
+      { "key": "featurette-key", "site": "YouTube", "name": "Making Of", "type": "Featurette", "official": true, "size": 720 }
+    ]
+  },
+  "watch/providers": {
+    "results": {
+      "US": {
+        "link": "https://www.themoviedb.org/movie/27205-inception/watch?locale=US",
+        "flatrate": [
+          { "provider_id": 8, "provider_name": "Stream Service B", "logo_path": "/logo-b.jpg", "display_priority": 2 },
+          { "provider_id": 9, "provider_name": "Stream Service A", "logo_path": "/logo-a.jpg", "display_priority": 1 }
+        ],
+        "rent": [{ "provider_id": 2, "provider_name": "Rental Store", "logo_path": "/logo-r.jpg", "display_priority": 5 }],
+        "buy": [{ "provider_id": 2, "provider_name": "Rental Store", "logo_path": "/logo-r.jpg", "display_priority": 5 }],
+        "ads": [{ "provider_id": 300, "provider_name": "Free With Ads", "logo_path": null, "display_priority": 9 }]
+      },
+      "PK": {
+        "link": "https://www.themoviedb.org/movie/27205-inception/watch?locale=PK",
+        "flatrate": [{ "provider_id": 9, "provider_name": "Stream Service A", "logo_path": "/logo-a.jpg", "display_priority": 1 }]
+      }
+    }
+  },
+  "release_dates": {
+    "results": [
+      {
+        "iso_3166_1": "US",
+        "release_dates": [
+          { "certification": "", "type": 1 },
+          { "certification": "PG-13", "type": 3 }
+        ]
+      }
+    ]
+  }
+}

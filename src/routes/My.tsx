@@ -62,7 +62,7 @@ export default function My() {
           <Icon name="edit" /> Manage profiles
         </Link>
         <Link to="/about" className="my__link">
-          <Icon name="info" /> Sources, licenses &amp; credits
+          <Icon name="info" /> About &amp; credits
         </Link>
       </nav>
     </div>

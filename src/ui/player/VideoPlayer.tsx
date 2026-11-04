@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Source } from '../../providers'
 import { Icon } from '../Icon'
 import { formatClock } from './time'
+import { isHlsSource, usesNativePlayer } from './routing'
+import { YouTubeStage } from './YouTubeStage'
 
 export interface VideoPlayerProps {
   sources: Source[]
@@ -29,7 +31,16 @@ const HIDE_AFTER_MS = 3000
 const REPORT_EVERY_MS = 5000
 const UP_NEXT_SEC = 25
 
-export function VideoPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, onProgress, onEnded, next, sourcePage }: VideoPlayerProps) {
+/**
+ * Single entry point for playback. TMDB trailers (YouTube) play in YouTube's
+ * official embedded player; direct HLS / MP4 streams use our own <video> + hls.js.
+ */
+export function VideoPlayer(props: VideoPlayerProps) {
+  // Local media-server URLs (http://localhost…) always use the native player so playback is tracked natively.
+  return usesNativePlayer(props.sources[0]) ? <StreamPlayer {...props} /> : <YouTubeStage {...props} />
+}
+
+function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, onProgress, onEnded, next, sourcePage }: VideoPlayerProps) {
   const root = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
   const hls = useRef<Hls | null>(null)
@@ -83,7 +94,7 @@ export function VideoPlayer({ sources, title, subtitle, poster, startAt = 0, onB
     const start = () => v.play().catch(() => setPlaying(false))
 
     // Safari plays HLS natively; elsewhere hls.js is loaded on demand so MP4-only sessions never download it.
-    if (source.type === 'hls' && !v.canPlayType('application/vnd.apple.mpegurl')) {
+    if (isHlsSource(source) && !v.canPlayType('application/vnd.apple.mpegurl')) {
       import('hls.js')
         .then(({ default: HlsJs }) => {
           if (cancelled) return

@@ -22,10 +22,10 @@ export default function App() {
         <Routes>
           <Route path="/profiles" element={<Profiles />} />
           <Route element={<RequireProfile />}>
-            <Route path="/watch/:provider/:id" element={<Watch />} />
+            <Route path="/watch/:mediaType/:id" element={<Watch />} />
             <Route element={<AppLayout />}>
               <Route index element={<Home />} />
-              <Route path="/title/:provider/:id" element={<Title />} />
+              <Route path="/title/:mediaType/:id" element={<Title />} />
               <Route path="/browse/:rowId" element={<Browse />} />
               <Route path="/search" element={<Search />} />
               <Route path="/clips" element={<Clips />} />

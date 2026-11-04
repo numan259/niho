@@ -1,0 +1,58 @@
+{
+  "page": 1,
+  "total_pages": 1000,
+  "total_results": 20000,
+  "results": [
+    {
+      "id": 27205,
+      "media_type": "movie",
+      "title": "Inception",
+      "release_date": "2010-07-15",
+      "overview": "A thief who steals secrets through dreams is offered one last job.",
+      "genre_ids": [28, 878, 12],
+      "poster_path": "/sample-inception-poster.jpg",
+      "backdrop_path": "/sample-inception-backdrop.jpg",
+      "vote_average": 8.369,
+      "adult": false
+    },
+    {
+      "id": 1396,
+      "media_type": "tv",
+      "name": "Breaking Bad",
+      "first_air_date": "2008-01-20",
+      "overview": "A chemistry teacher takes a dangerous turn after a diagnosis.",
+      "genre_ids": [18, 80],
+      "poster_path": "/sample-bb-poster.jpg",
+      "backdrop_path": null,
+      "vote_average": 8.9
+    },
+    {
+      "id": 17419,
+      "media_type": "person",
+      "name": "Someone Famous"
+    },
+    {
+      "id": 99999,
+      "media_type": "movie",
+      "title": "Hidden Adult Title",
+      "adult": true
+    },
+    {
+      "id": 27205,
+      "media_type": "movie",
+      "title": "Inception",
+      "release_date": "2010-07-15"
+    },
+    {
+      "id": 129,
+      "media_type": "movie",
+      "title": "Spirited Away",
+      "release_date": "2001-07-20",
+      "overview": "A girl wanders into a world of spirits.",
+      "genre_ids": [16, 10751, 14],
+      "poster_path": null,
+      "backdrop_path": "/sample-sa-backdrop.jpg",
+      "vote_average": 0
+    }
+  ]
+}

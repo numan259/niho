@@ -1,54 +1,96 @@
-export type LicenseKind = 'public-domain' | 'cc-by' | 'cc-by-sa' | 'cc-other'
-
-export interface License {
-  url: string
-  kind: LicenseKind
-  /** Short human label, e.g. "Public domain" or "CC BY 3.0" */
-  label: string
-}
+export type MediaType = 'movie' | 'tv'
 
 export interface Source {
   url: string
-  type: 'mp4' | 'hls'
-  /** Optional label shown in the quality menu, e.g. "720p" or "Low" */
+  /** youtube = official YouTube embed (TMDB trailers); hls/mp4 = direct streams */
+  type: 'mp4' | 'hls' | 'youtube'
+  /** Label shown in the player's source menu, e.g. "Official Trailer" or "720p" */
   quality?: string
 }
 
-export interface Episode {
-  /** Position in the episode list (0-based) */
-  index: number
+/** A trailer / teaser / clip as listed by TMDB (hosted on YouTube). */
+export interface Video {
+  /** YouTube video id */
+  key: string
   name: string
-  season?: number
-  number?: number
-  durationSec?: number
-  sources: Source[]
+  type: string
+  official: boolean
 }
 
-export type Provider = 'archive' | 'open'
-export type TitleKind = 'movie' | 'series'
-
-/** Light-weight title as returned by catalogue/search calls. */
+/** Light-weight title as returned by list / search endpoints. */
 export interface TitleSummary {
-  /** Stable unique key: `${provider}/${id}` */
+  /** Stable unique key: `${mediaType}/${id}` */
   key: string
-  provider: Provider
-  id: string
+  mediaType: MediaType
+  /** Numerical TMDB id */
+  id: number
   name: string
-  kind?: TitleKind
   year?: number
   synopsis?: string
+  /** Genre names */
   tags: string[]
-  poster: string
+  poster?: string
   backdrop?: string
-  license: License
+  /** TMDB user score 0–10, one decimal */
+  rating?: number
 }
 
-/** Full title with playable episodes (a movie has exactly one). */
+export interface CastMember {
+  id: number
+  name: string
+  character?: string
+  photo?: string
+}
+
+export interface SeasonSummary {
+  number: number
+  name: string
+  episodeCount: number
+  year?: number
+}
+
+export interface Episode {
+  season: number
+  number: number
+  name: string
+  overview?: string
+  still?: string
+  runtimeMin?: number
+  airDate?: string
+}
+
+export interface WatchProvider {
+  id: number
+  name: string
+  logo?: string
+}
+
+/** JustWatch availability data for one country, via TMDB. */
+export interface WatchAvailability {
+  region: string
+  /** TMDB "where to watch" page for this title + region */
+  link?: string
+  stream: WatchProvider[]
+  free: WatchProvider[]
+  rent: WatchProvider[]
+  buy: WatchProvider[]
+}
+
 export interface TitleDetail extends TitleSummary {
-  kind: TitleKind
-  episodes: Episode[]
+  tagline?: string
+  runtimeMin?: number
+  /** Age rating for the viewer's region, e.g. "PG-13" or "TV-14" */
+  certification?: string
+  /** Directors (movies) or creators (series) */
+  makers: string[]
+  cast: CastMember[]
+  /** Best trailer first */
+  videos: Video[]
+  /** Series only, specials (season 0) excluded */
+  seasons: SeasonSummary[]
+  watch?: WatchAvailability
+  /** Public TMDB page for sharing / attribution */
   sourcePage: string
-  credit?: string
 }
 
 export interface SearchPage {

@@ -1,25 +1,27 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useRow, useTitle } from '../catalog/queries'
 import { getRow } from '../catalog/rows'
 import type { TitleSummary } from '../providers'
-import { OPEN_MOVIES } from '../providers/openMovies'
 import { useLibrary } from '../state/library'
-import { titlePath } from '../ui/paths'
+import { useActiveProfile } from '../state/profiles'
 import { Icon } from '../ui/Icon'
-import { Spinner } from '../ui/States'
+import { titlePath } from '../ui/paths'
+import { YOUTUBE_HOST, youtubeEmbedUrl } from '../ui/player/youtube'
+import { ErrorMessage, Spinner } from '../ui/States'
 
-/** Vertical, swipeable feed of muted previews from short open-licensed titles. */
+/** Vertical, swipeable feed of muted trailers for this week's trending titles. */
 export default function Clips() {
-  const { data, isPending } = useRow(getRow('cartoons')!)
-  const feed = useMemo(() => interleave(OPEN_MOVIES, data?.items ?? []), [data])
+  const profile = useActiveProfile()!
+  const { data, isPending, error, refetch } = useRow(getRow(profile.kids ? 'animation' : 'trending')!)
   const [active, setActive] = useState(0)
   const [muted, setMuted] = useState(true)
 
   if (isPending) return <Spinner />
+  if (error) return <ErrorMessage error={error} onRetry={() => refetch()} />
   return (
     <div className="clips">
-      {feed.map((t, i) => (
+      {data.items.map((t, i) => (
         <Clip
           key={t.key}
           title={t}
@@ -35,15 +37,6 @@ export default function Clips() {
   )
 }
 
-function interleave<T>(a: T[], b: T[]): T[] {
-  const out: T[] = []
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    if (b[i]) out.push(b[i])
-    if (a[i]) out.push(a[i])
-  }
-  return out
-}
-
 interface ClipProps {
   title: TitleSummary
   index: number
@@ -54,13 +47,19 @@ interface ClipProps {
   onVisible: (i: number) => void
 }
 
+/** Sends a command to an embedded YouTube player (enablejsapi=1). */
+function command(frame: HTMLIFrameElement | null, func: 'mute' | 'unMute') {
+  frame?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args: [] }), YOUTUBE_HOST)
+}
+
 function Clip({ title, index, active, near, muted, onMute, onVisible }: ClipProps) {
   const ref = useRef<HTMLElement>(null)
-  const video = useRef<HTMLVideoElement>(null)
+  const frame = useRef<HTMLIFrameElement>(null)
   const lib = useLibrary()
-  const { data } = useTitle(near ? title.provider : undefined, near ? title.id : undefined)
+  // Only fetch details (and the trailer id) for the visible clip and its neighbours.
+  const { data } = useTitle(near ? title.mediaType : undefined, near ? title.id : undefined)
   const t = data ?? title
-  const mp4 = data?.episodes[0]?.sources.find((s) => s.type === 'mp4')
+  const trailer = data?.videos[0]
   const inList = lib.inMyList(title.key)
 
   useEffect(() => {
@@ -72,28 +71,37 @@ function Clip({ title, index, active, near, muted, onMute, onVisible }: ClipProp
   }, [index, onVisible])
 
   useEffect(() => {
-    const v = video.current
-    if (!v) return
-    if (active) v.play().catch(() => undefined)
-    else v.pause()
-  }, [active, mp4])
-
-  // Start a little way in so the preview skips titles and logos.
-  const start = Math.min(90, Math.floor((data?.episodes[0]?.durationSec ?? 300) * 0.15))
+    command(frame.current, muted ? 'mute' : 'unMute')
+  }, [muted])
 
   return (
     <article ref={ref} className="clip" aria-label={t.name}>
-      {mp4 && near ? (
-        <video ref={video} className="clip__video" src={`${mp4.url}#t=${start}`} muted={muted} loop playsInline preload="metadata" poster={t.backdrop ?? t.poster} />
-      ) : (
-        <img className="clip__video" src={t.backdrop ?? t.poster} alt="" />
+      <img className="clip__video" src={t.backdrop ?? t.poster} alt="" />
+      {active && trailer && (
+        <iframe
+          ref={frame}
+          className="clip__video clip__frame"
+          src={youtubeEmbedUrl(trailer.key, {
+            autoplay: 1,
+            mute: 1,
+            controls: 0,
+            loop: 1,
+            playlist: trailer.key,
+            enablejsapi: 1,
+            origin: window.location.origin,
+          })}
+          title={`${t.name} trailer`}
+          allow="autoplay; encrypted-media; picture-in-picture"
+          referrerPolicy="strict-origin-when-cross-origin"
+          onLoad={() => !muted && command(frame.current, 'unMute')}
+        />
       )}
       <div className="clip__shade" />
       <div className="clip__info">
         <h2 className="clip__title">{t.name}</h2>
         {t.tags.length > 0 && <p className="clip__tags">{t.tags.slice(0, 3).join('  •  ')}</p>}
         {t.synopsis && <p className="clip__synopsis">{t.synopsis}</p>}
-        <span className="badge">{t.license.label}</span>
+        {t.rating && <span className="badge">★ {t.rating}</span>}
       </div>
       <div className="clip__actions">
         <button className="action" onClick={onMute} aria-label={muted ? 'Unmute' : 'Mute'}>
@@ -108,7 +116,11 @@ function Clip({ title, index, active, near, muted, onMute, onVisible }: ClipProp
           <span>Details</span>
         </Link>
       </div>
-      {active && !mp4 && near && <div className="clip__loading"><Spinner /></div>}
+      {active && near && !data && (
+        <div className="clip__loading">
+          <Spinner />
+        </div>
+      )}
     </article>
   )
 }

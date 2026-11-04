@@ -1747,9 +1747,251 @@ a.card:hover {
   gap: 6px;
 }
 
-.prose code {
+.prose code,
+.message__body code {
   font-size: 0.85em;
   padding: 1px 5px;
   border-radius: 4px;
   background: var(--surface);
+}
+
+.tmdb-credit img {
+  display: block;
+}
+
+.home__footer img {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+/* ------------------------------------------------------- title: TMDB data */
+.title-page__tagline {
+  margin-top: -6px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.title-page__note {
+  font-size: 0.92rem;
+  color: var(--text-dim);
+}
+
+.title-page__credits {
+  font-size: 0.9rem;
+}
+
+.title-page__credits span {
+  color: var(--text-faint);
+}
+
+.rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.rating span {
+  color: var(--accent);
+}
+
+.attribution {
+  margin: 16px 0 8px;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+.attribution a {
+  text-decoration: underline;
+}
+
+/* where to watch (JustWatch data) */
+.where {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+}
+
+.where__title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.where__group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.where__label {
+  flex: none;
+  width: 52px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.where__providers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.provider {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  font-weight: 700;
+  transition: transform 0.15s var(--ease);
+}
+
+.provider:hover {
+  transform: translateY(-2px);
+}
+
+.provider img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.where__empty,
+.where__source {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.where__source a {
+  text-decoration: underline;
+}
+
+/* seasons & episodes */
+.episodes-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.select select {
+  height: 44px;
+  padding: 0 40px 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23a8a5ad' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E")
+    no-repeat right 14px center;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.episode__still {
+  flex: none;
+  width: 120px;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm);
+}
+
+.episode__still .artwork__fallback {
+  font-size: 0.8rem;
+}
+
+.episode__overview {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+/* cast */
+.cast {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 18px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cast__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.cast__photo {
+  width: 84px;
+  height: 84px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+}
+
+.cast__name {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.cast__role {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+/* ------------------------------------------------- trailer (YouTube) stage */
+.player--youtube {
+  display: flex;
+  flex-direction: column;
+}
+
+.player .player__top--static {
+  position: relative;
+  flex: none;
+  padding-bottom: 10px;
+  background: #000;
+}
+
+.player__frame {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.player__frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.player__menu--down {
+  z-index: 5;
+  top: calc(100% + 8px);
+  bottom: auto;
+}
+
+.clip__frame {
+  border: 0;
+  pointer-events: none;
 }

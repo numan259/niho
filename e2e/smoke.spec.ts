@@ -1,76 +1,85 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from '@playwright/test'
+import { asProfile, mockServices } from './mocks'
 
-const PROFILE_STATE = JSON.stringify({
-  state: { profiles: [{ id: 'me', name: 'Me', color: '#f2b64c', kids: false }], activeId: 'me' },
-  version: 1,
+test.beforeEach(async ({ page }) => {
+  await mockServices(page)
 })
 
-async function asProfile(page: Page) {
-  await page.addInitScript((state) => {
-    if (!localStorage.getItem('niho.profiles')) localStorage.setItem('niho.profiles', state)
-  }, PROFILE_STATE)
-}
-
-const videoTime = (page: Page) => page.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime)
-
-test('pick a profile and browse home', async ({ page }) => {
+test('pick a profile and browse TMDB rows', async ({ page }) => {
   await page.goto('/')
   await expect(page).toHaveURL(/\/profiles$/)
   await page.getByRole('button', { name: 'Watch as Me' }).click()
 
   await expect(page.getByRole('region', { name: /^Featured:/ })).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Niho Open Originals' }).getByRole('link').first()).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Popular Classic Films' }).getByRole('link').first()).toBeVisible()
+  const trending = page.getByRole('region', { name: 'Trending This Week' })
+  await expect(trending.getByRole('link', { name: 'Inception (2010)' })).toHaveAttribute('href', '/title/movie/27205')
+  await expect(trending.getByRole('link', { name: 'Breaking Bad (2008)' })).toHaveAttribute('href', '/title/tv/1396')
   await page.screenshot({ path: 'test-results/home.png' })
 })
 
-test('plays an Internet Archive MP4 and resumes from Continue Watching', async ({ page }) => {
+test('title page shows details, where to watch and cast', async ({ page }) => {
   await asProfile(page)
-  await page.goto('/title/archive/his_girl_friday')
-  await expect(page.getByRole('heading', { name: 'His Girl Friday' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Public domain', description: 'View license' })).toBeVisible()
+  await page.goto('/title/movie/27205')
+  await expect(page.getByRole('heading', { name: 'Inception', level: 1 })).toBeVisible()
+  await expect(page.getByText('PG-13')).toBeVisible()
+  await expect(page.getByText('Directed by')).toBeVisible()
 
-  await page.getByRole('button', { name: 'Play', exact: true }).click()
-  await expect.poll(() => videoTime(page), { timeout: 60_000 }).toBeGreaterThan(2)
+  const where = page.getByRole('region', { name: 'Where to watch' })
+  await expect(where.getByRole('link', { name: 'Stream on Stream Service A' })).toHaveAttribute('href', /themoviedb\.org\/movie\/27205/)
+  await expect(where.getByRole('link', { name: 'Rent on Rental Store' })).toBeVisible()
+  await expect(where.getByRole('link', { name: 'JustWatch' })).toBeVisible()
 
-  // Jump ahead, then leave the player: progress is saved on exit.
-  await page.locator('video').evaluate((v: HTMLVideoElement) => (v.currentTime = 600))
-  await expect.poll(() => videoTime(page)).toBeGreaterThan(600)
-  await page.getByRole('button', { name: 'Back', exact: true }).click({ force: true })
+  await page.getByRole('tab', { name: 'Cast' }).click()
+  await expect(page.getByText('Lead Actor')).toBeVisible()
+  await page.screenshot({ path: 'test-results/title.png', fullPage: true })
+})
+
+test('plays the official trailer and resumes it from Continue Watching', async ({ page }) => {
+  await asProfile(page)
+  await page.goto('/title/movie/27205')
+  await page.getByRole('button', { name: 'Play trailer', exact: true }).click()
+
+  await expect(page).toHaveURL(/\/watch\/movie\/27205$/)
+  const frame = page.locator('.player__frame iframe')
+  await expect(frame).toHaveAttribute('data-video-id', 'official-trailer')
+  await expect(frame).toHaveAttribute('src', /youtube-nocookie\.com\/embed\/official-trailer/)
+
+  // Watch 90 of 150 seconds, then leave: progress is saved on exit.
+  await page.evaluate(() => ((window as unknown as { __ytTime: number }).__ytTime = 90))
+  await page.getByRole('button', { name: 'Back', exact: true }).click()
 
   await page.goto('/')
   const row = page.getByRole('region', { name: 'Continue Watching for Me' })
-  await expect(row.getByRole('link', { name: /Play His Girl Friday, .* left/ })).toBeVisible()
-  await page.screenshot({ path: 'test-results/continue.png' })
-
-  await row.getByRole('link', { name: /Play His Girl Friday/ }).click()
-  await expect.poll(() => videoTime(page), { timeout: 60_000 }).toBeGreaterThan(590)
+  await row.getByRole('link', { name: 'Play Inception, 1 min left' }).click()
+  await expect(page.locator('.player__frame iframe')).toHaveAttribute('data-start', '90')
 })
 
-test('plays an adaptive HLS stream with a quality menu', async ({ page }) => {
+test('switches between a title’s trailers', async ({ page }) => {
   await asProfile(page)
-  await page.goto('/watch/open/tears-of-steel')
-  await expect.poll(() => videoTime(page), { timeout: 60_000 }).toBeGreaterThan(2)
-
-  await page.locator('.player').hover()
-  await page.getByRole('button', { name: 'Quality' }).click()
-  const options = page.getByRole('menuitemradio')
-  await expect(options.first()).toHaveText(/Auto/)
-  expect(await options.count()).toBeGreaterThan(2)
-  await page.screenshot({ path: 'test-results/player-hls.png' })
+  await page.goto('/watch/movie/27205')
+  await page.getByRole('button', { name: 'Choose video' }).click()
+  await page.getByRole('menuitemradio', { name: /Teaser/ }).click()
+  await expect(page.locator('.player__frame iframe')).toHaveAttribute('data-video-id', 'teaser-key')
 })
 
-test('opens a series and lists its episodes', async ({ page }) => {
+test('series: season episodes play a preview with S:E progress', async ({ page }) => {
   await asProfile(page)
-  await page.goto('/title/archive/Bonanza_pd')
+  await page.goto('/title/tv/1396')
   await expect(page.getByRole('tab', { name: 'Episodes' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByRole('link', { name: /^Play episode 1: Episode 19$/ })).toBeVisible()
+  await expect(page.getByRole('combobox')).toHaveValue('1')
+
+  await page.getByRole('link', { name: 'Play preview for episode 1: Pilot' }).click()
+  await expect(page).toHaveURL(/\/watch\/tv\/1396\?s=1&e=1$/)
+  await expect(page.getByText('S1:E1 · Pilot')).toBeVisible()
+  // No episode clip on TMDB → falls back to the series trailer.
+  await expect(page.locator('.player__frame iframe')).toHaveAttribute('data-video-id', 'show-trailer')
+  await expect(page.getByRole('button', { name: 'Next: S1:E2' })).toBeVisible()
 })
 
-test('searches the licensed catalogue', async ({ page }) => {
+test('searches TMDB', async ({ page }) => {
   await asProfile(page)
   await page.goto('/search')
-  await page.getByRole('searchbox', { name: 'Search' }).fill('noir')
+  await page.getByRole('searchbox', { name: 'Search' }).fill('incep')
   await expect(page.getByRole('heading', { name: 'Films & Series' })).toBeVisible()
-  await expect(page.locator('.gallery a.card').first()).toBeVisible()
+  await expect(page.locator('.gallery').getByRole('link', { name: 'Inception (2010)' })).toBeVisible()
 })
