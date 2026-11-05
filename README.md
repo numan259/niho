@@ -8,7 +8,25 @@ playback for movies and TV episodes.
 Niho is a frontend application. It does not contain a media backend, scraper,
 database, user account service, or authentication server. Metadata comes from
 TMDB, trailers are embedded from YouTube, and direct playback is delegated to
-an externally running CinePro Core service.
+an externally running [CinePro Core](https://github.com/numan259/cinepro)
+service.
+
+## Niho + CinePro
+
+Niho and CinePro are separate projects designed to work together:
+
+- [Niho](https://github.com/numan259/niho) is the user-facing discovery and
+  playback interface.
+- [CinePro](https://github.com/numan259/cinepro) is the streaming backend that
+  resolves media and serves HLS playlists, audio tracks, subtitle tracks, and
+  segments.
+
+Niho needs CinePro when users want to watch full movies or TV episodes. Niho
+handles the catalog experience and player controls, while CinePro handles the
+server-side stream preparation and delivery. Running both projects gives
+self-hosters a complete setup instead of a catalog-only application. CinePro
+can remain on a private network or VPN, and Niho connects to its configured
+Core URL without requiring the media service to be exposed publicly.
 
 ## Features
 
@@ -51,8 +69,8 @@ The `src/providers/tmdb.ts` module calls TMDB for metadata and images. The
 uses hls.js for browsers without native HLS and uses native HLS when hls.js is
 unavailable but the browser supports HLS.
 
-The CinePro service is external to this repository. Its expected endpoints
-are:
+The [CinePro service](https://github.com/numan259/cinepro) is external to this
+repository. Its expected endpoints are:
 
 ```text
 http://<cinepro-host>:3000/streams/movie/{tmdbId}/master.m3u8
@@ -141,7 +159,8 @@ release preparation.
 
 ## Usage
 
-1. Start a reachable CinePro Core instance if playback is needed.
+1. Clone and configure [CinePro](https://github.com/numan259/cinepro) if full
+   movie or TV playback is needed, and start its Core server.
 2. Start Niho with `npm run dev`.
 3. Open the local web URL.
 4. Choose or create a local profile.
@@ -244,4 +263,3 @@ license and notices when redistributing.
 Niho uses the TMDB API and imagery, YouTube for embedded trailers, and
 JustWatch availability data exposed through TMDB. Niho is not endorsed or
 certified by TMDB, YouTube, JustWatch, or any streaming service.
-

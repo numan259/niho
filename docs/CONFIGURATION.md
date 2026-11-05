@@ -14,7 +14,9 @@ credential as a server-only secret.
 
 ## CinePro
 
-The current CinePro base URL is a constant in `src/providers/cinepro.ts`.
+The companion [CinePro project](https://github.com/numan259/cinepro) is the
+backend responsible for resolving and serving HLS media. The current CinePro
+base URL is a constant in `src/providers/cinepro.ts`.
 It must point to a reachable CinePro Core deployment:
 
 ```text
@@ -29,4 +31,3 @@ HLS URL and its rewritten nested playlists and segments.
 
 No environment variables configure profiles or library data. Those values are
 stored in browser or Android local storage and are device-specific.
-

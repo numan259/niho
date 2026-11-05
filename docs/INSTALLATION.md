@@ -9,6 +9,11 @@ Requirements:
 - A TMDB account and credential
 - Optional CinePro Core instance for direct playback
 
+For full movie and episode playback, install and run the companion
+[CinePro project](https://github.com/numan259/cinepro) first. Niho can run as a
+discovery and trailer app without CinePro, but it cannot serve full media
+streams itself.
+
 ```bash
 git clone <repository-url>
 cd netflix
@@ -54,4 +59,3 @@ adb reverse tcp:3000 tcp:3000
 
 There are no migrations or database credentials. Profiles, My List, likes,
 and playback progress are stored locally on each device.
-

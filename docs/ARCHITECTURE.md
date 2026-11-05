@@ -27,8 +27,15 @@ flowchart TD
 ## External boundaries
 
 Niho has no repository-owned backend or database. TMDB supplies metadata and
-images. YouTube supplies embedded trailers. CinePro supplies direct HLS
-playlists and segments. Local storage supplies device-only user state.
+images. YouTube supplies embedded trailers. The separate
+[CinePro project](https://github.com/numan259/cinepro) supplies direct HLS
+playlists, audio tracks, subtitle tracks, and segments. Local storage supplies
+device-only user state.
+
+Niho is useful without CinePro for discovery, metadata, trailers, and
+watch-provider information. CinePro is required for the full-playback
+experience because it is the component that prepares and delivers the HLS
+media stream.
 
 ## Routes and ports
 
@@ -41,4 +48,3 @@ playlists and segments. Local storage supplies device-only user state.
 The current CinePro host is a hardcoded deployment value in
 `src/providers/cinepro.ts`. It should be made configurable before broad
 self-hosting.
-
