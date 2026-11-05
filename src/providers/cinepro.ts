@@ -1,6 +1,8 @@
 import type { MediaType, Source } from './types'
 
-const API = 'http://100.79.160.87:3000'
+const API = (
+  import.meta.env.VITE_CINEPRO_URL || 'http://localhost:3000'
+).replace(/\/$/, '')
 
 export async function getCineProSources(
   mediaType: MediaType,
