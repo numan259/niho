@@ -42,8 +42,10 @@ function TitleView({ title: t }: { title: TitleDetail }) {
   const inList = lib.inMyList(t.key)
   const liked = lib.isLiked(t.key)
   const hasTrailer = t.videos.length > 0
+  const isMovie = t.mediaType === 'movie'
   const resumeEp = entry?.season !== undefined ? { season: entry.season, episode: entry.episodeIndex + 1 } : undefined
-  const play = () => navigate(watchPath(t, resumeEp))
+  const firstEpisode = t.seasons[0] ? { season: t.seasons[0].number, episode: 1 } : undefined
+  const play = () => navigate(watchPath(t, isMovie ? undefined : resumeEp ?? firstEpisode))
 
   const runtime = isSeries
     ? t.seasons.length
@@ -73,8 +75,8 @@ function TitleView({ title: t }: { title: TitleDetail }) {
         <div className="title-page__back">
           <BackButton />
         </div>
-        {hasTrailer && (
-          <button className="title-page__hero-play" onClick={play} aria-label={`Play trailer for ${t.name}`}>
+        {(isMovie || hasTrailer) && (
+          <button className="title-page__hero-play" onClick={play} aria-label={`Play ${isMovie ? 'movie' : 'trailer'} for ${t.name}`}>
             <Icon name="play" size={34} />
           </button>
         )}
@@ -94,11 +96,11 @@ function TitleView({ title: t }: { title: TitleDetail }) {
           )}
         </p>
 
-        {hasTrailer ? (
+        {isMovie || hasTrailer ? (
           <div className="title-page__primary">
             <button className="btn btn--primary btn--block" onClick={play}>
               <Icon name="play" size={22} />
-              {entry && !entry.upNext ? 'Resume trailer' : 'Play trailer'}
+              {entry && !entry.upNext ? `Resume ${isMovie ? 'movie' : 'trailer'}` : `Play ${isMovie ? 'movie' : 'trailer'}`}
             </button>
             {entry && !entry.upNext && entry.duration > 0 && (
               <div className="title-page__resume">

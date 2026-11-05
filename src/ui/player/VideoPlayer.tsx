@@ -27,16 +27,41 @@ interface QualityOption {
   value: number
 }
 
+interface TrackOption {
+  id: number
+  label: string
+  language?: string
+}
+
 const HIDE_AFTER_MS = 3000
 const REPORT_EVERY_MS = 5000
 const UP_NEXT_SEC = 25
+const STREAM_LOAD_TIMEOUT_MS = 15000
+const AUDIO_LANGUAGE_KEY = 'niho.audioLanguage'
+const SUBTITLE_LANGUAGE_KEY = 'niho.subtitleLanguage'
+
+function readTrackPreference(key: string): string | undefined {
+  try {
+    return sessionStorage.getItem(key) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+function writeTrackPreference(key: string, value: string | undefined) {
+  try {
+    if (value) sessionStorage.setItem(key, value)
+    else sessionStorage.removeItem(key)
+  } catch {
+    // Track preferences are optional when storage is unavailable.
+  }
+}
 
 /**
  * Single entry point for playback. TMDB trailers (YouTube) play in YouTube's
  * official embedded player; direct HLS / MP4 streams use our own <video> + hls.js.
  */
 export function VideoPlayer(props: VideoPlayerProps) {
-  // Local media-server URLs (http://localhost…) always use the native player so playback is tracked natively.
   return usesNativePlayer(props.sources[0]) ? <StreamPlayer {...props} /> : <YouTubeStage {...props} />
 }
 
@@ -46,6 +71,10 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
   const hls = useRef<Hls | null>(null)
   const resumeAt = useRef(startAt)
   const hideTimer = useRef<number | undefined>(undefined)
+  const sourceTimeout = useRef<number | undefined>(undefined)
+  const playbackStarted = useRef(false)
+  const preferredAudioLanguage = useRef<string | undefined>(readTrackPreference(AUDIO_LANGUAGE_KEY))
+  const preferredSubtitleLanguage = useRef<string | undefined>(readTrackPreference(SUBTITLE_LANGUAGE_KEY))
 
   const [sourceIndex, setSourceIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -60,6 +89,12 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
   const [hlsLevels, setHlsLevels] = useState<QualityOption[]>([])
   const [hlsLevel, setHlsLevel] = useState(-1)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [audioTracks, setAudioTracks] = useState<TrackOption[]>([])
+  const [audioTrack, setAudioTrack] = useState(-1)
+  const [subtitleTracks, setSubtitleTracks] = useState<TrackOption[]>([])
+  const [subtitleTrack, setSubtitleTrack] = useState(-1)
+  const [trackMenu, setTrackMenu] = useState<'audio' | 'subtitles' | null>(null)
+  const [moreSubtitlesOpen, setMoreSubtitlesOpen] = useState(false)
 
   // Keep latest callbacks in refs so effects don't re-run when parents re-render.
   const cb = useRef({ onProgress, onEnded })
@@ -72,7 +107,49 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
     if (v && v.duration && Number.isFinite(v.duration)) cb.current.onProgress(v.currentTime, v.duration)
   }, [])
 
+  const markPlaybackStarted = useCallback(() => {
+    playbackStarted.current = true
+    window.clearTimeout(sourceTimeout.current)
+    sourceTimeout.current = undefined
+  }, [])
+
   const source = sources[sourceIndex]
+  const isEnglishTrack = (track: TrackOption) => {
+    const value = `${track.language ?? ''} ${track.label}`.toLowerCase()
+    return value === 'en' || value.startsWith('en ') || value.includes('english') || value.includes('(en)')
+  }
+  const isTurkishTrack = (track: TrackOption) => {
+    const value = `${track.language ?? ''} ${track.label}`.toLowerCase()
+    return value === 'tr' || value.startsWith('tr ') || value.includes('turkish') || value.includes('(tr)')
+  }
+  const englishSubtitles = subtitleTracks.filter(isEnglishTrack)
+  const turkishSubtitles = subtitleTracks.filter(isTurkishTrack)
+  const moreSubtitles = subtitleTracks.filter(
+    (track) => !englishSubtitles.some((english) => english.id === track.id) && !turkishSubtitles.some((turkish) => turkish.id === track.id),
+  )
+
+  const trackLabel = (track: { name?: string; lang?: string; language?: string }, fallback: string) => {
+    const language = track.lang ?? track.language
+    return track.name || language || fallback
+  }
+
+  const toTrackOptions = (tracks: Array<{ name?: string; lang?: string; language?: string }>): TrackOption[] =>
+    tracks.map((track, id) => ({
+      id,
+      label: trackLabel(track, `Track ${id + 1}`),
+      language: track.lang ?? track.language,
+    }))
+
+  const syncTextTrackMode = useCallback((selected: number) => {
+    const tracks = video.current?.textTracks
+    if (!tracks) return
+    for (let i = 0; i < tracks.length; i += 1) {
+      const track = tracks[i]
+      // TextTrack.mode is the browser API required to show or hide HLS captions.
+      // oxlint-disable-next-line react/immutability
+      if (track) track.mode = i === selected ? 'showing' : 'disabled'
+    }
+  }, [])
 
   const failOver = useCallback(
     (reason: string) => {
@@ -88,51 +165,176 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
     const v = video.current
     if (!v || !source) return
     let cancelled = false
+    let retriedNetwork = false
+    let loadTimer: number | undefined
+    playbackStarted.current = false
+    const startLoadTimeout = () => {
+      window.clearTimeout(loadTimer)
+      loadTimer = window.setTimeout(() => {
+        if (cancelled || playbackStarted.current || !v.paused || v.currentTime > 0) return
+        console.warn('[Niho HLS] SOURCE_TIMEOUT', {
+          url: source.url,
+          action: sourceIndex + 1 < sources.length ? 'trying_next_source' : 'showing_error',
+        })
+        failOver('The CinePro stream did not start playing within 15 seconds.')
+      }, STREAM_LOAD_TIMEOUT_MS)
+      sourceTimeout.current = loadTimer
+    }
     setError(null)
     setWaiting(true)
     setHlsLevels([])
+    setAudioTracks([])
+    setAudioTrack(-1)
+    setSubtitleTracks([])
+    setSubtitleTrack(-1)
+    setTrackMenu(null)
+    setMoreSubtitlesOpen(false)
     const start = () => v.play().catch(() => setPlaying(false))
 
-    // Safari plays HLS natively; elsewhere hls.js is loaded on demand so MP4-only sessions never download it.
-    if (isHlsSource(source) && !v.canPlayType('application/vnd.apple.mpegurl')) {
+    if (isHlsSource(source)) {
       import('hls.js')
         .then(({ default: HlsJs }) => {
           if (cancelled) return
-          if (!HlsJs.isSupported()) return failOver('Adaptive streaming is not supported in this browser.')
+          if (!HlsJs.isSupported()) {
+            if (v.canPlayType('application/vnd.apple.mpegurl')) {
+              v.src = source.url
+              start()
+            } else {
+              failOver('Adaptive streaming is not supported in this browser.')
+            }
+            return
+          }
+          console.info('[Niho HLS] FINAL_STREAM_URL', source.url)
           const h = new HlsJs({ startPosition: resumeAt.current || -1 })
           hls.current = h
+          const updateAudioTracks = () => {
+            const tracks = toTrackOptions(h.audioTracks)
+            console.info('[Niho HLS] AUDIO_TRACKS_UPDATED', tracks)
+            setAudioTracks(tracks)
+            const preferred = preferredAudioLanguage.current
+            const selected = preferred
+              ? tracks.find((track) => track.language?.toLowerCase() === preferred.toLowerCase())?.id
+              : tracks.find((track) => track.language?.toLowerCase().startsWith('en'))?.id
+            const nextTrack = selected ?? (tracks.length ? h.audioTrack : -1)
+            if (nextTrack >= 0) h.audioTrack = nextTrack
+            setAudioTrack(nextTrack)
+          }
+          const updateSubtitleTracks = () => {
+            const tracks = toTrackOptions(h.subtitleTracks)
+            console.info('[Niho HLS] SUBTITLE_TRACKS_UPDATED', tracks)
+            setSubtitleTracks(tracks)
+            const preferred = preferredSubtitleLanguage.current
+            const selected = preferred
+              ? tracks.find((track) => track.language?.toLowerCase() === preferred.toLowerCase())?.id
+              : undefined
+            const nextTrack = selected ?? -1
+            h.subtitleTrack = nextTrack
+            setSubtitleTrack(nextTrack)
+          }
+          h.on(HlsJs.Events.AUDIO_TRACKS_UPDATED, updateAudioTracks)
+          h.on(HlsJs.Events.SUBTITLE_TRACKS_UPDATED, updateSubtitleTracks)
+          h.on(HlsJs.Events.MANIFEST_LOADING, (_e, data) => {
+            console.info('[Niho HLS] MANIFEST_LOADING', {
+              url: data.url,
+            })
+          })
           h.on(HlsJs.Events.MANIFEST_PARSED, (_e, data) => {
+            console.info('[Niho HLS] MANIFEST_PARSED', {
+              url: source.url,
+              levels: data.levels.length,
+              codecs: data.levels.map((level) => level.codecSet),
+            })
             const levels = data.levels
               .map((l, i) => ({ label: `${l.height}p`, value: i, height: l.height }))
               .sort((a, b) => b.height - a.height)
               .map(({ label, value }) => ({ label, value }))
             setHlsLevels([{ label: 'Auto', value: -1 }, ...levels])
+            updateAudioTracks()
+            updateSubtitleTracks()
+            markPlaybackStarted()
+            start()
+          })
+          h.on(HlsJs.Events.LEVEL_LOADED, (_e, data) => {
+            console.info('[Niho HLS] LEVEL_LOADED', {
+              url: data.details.url,
+              fragments: data.details.fragments.length,
+            })
+          })
+          h.on(HlsJs.Events.FRAG_LOADING, (_e, data) => {
+            console.info('[Niho HLS] FRAG_LOADING', {
+              url: data.frag.url,
+              start: data.frag.start,
+              duration: data.frag.duration,
+            })
+          })
+          h.on(HlsJs.Events.FRAG_LOADED, (_e, data) => {
+            console.info('[Niho HLS] FRAG_LOADED', {
+              url: data.frag.url,
+              start: data.frag.start,
+              duration: data.frag.duration,
+            })
+            markPlaybackStarted()
+          })
+          h.on(HlsJs.Events.FRAG_BUFFERED, () => {
+            markPlaybackStarted()
           })
           h.on(HlsJs.Events.ERROR, (_e, data) => {
-            if (data.fatal) failOver('This stream is unavailable right now.')
+            console.error('[Niho HLS] ERROR', {
+              type: data.type,
+              details: data.details,
+              isFragLoadError: data.details === 'fragLoadError',
+              isBufferStalledError: data.details === 'bufferStalledError',
+              isMediaError: data.type === HlsJs.ErrorTypes.MEDIA_ERROR,
+              fatal: data.fatal,
+              url: data.url,
+              responseCode: data.response?.code,
+              reason: data.reason,
+            })
+            if (!data.fatal || playbackStarted.current || !v.paused || v.currentTime > 0) return
+            window.clearTimeout(loadTimer)
+            if (data.type === HlsJs.ErrorTypes.NETWORK_ERROR && !retriedNetwork && !cancelled) {
+              retriedNetwork = true
+              h.startLoad()
+              return
+            }
+            if (data.details === 'manifestIncompatibleCodecsError') {
+              failOver('This browser does not support the CinePro stream codecs (H.264/AAC).')
+              return
+            }
+            const detail = data.details ? ` (${data.details})` : ''
+            failOver(`This stream is unavailable right now${detail}.`)
           })
           h.loadSource(source.url)
           h.attachMedia(v)
-          start()
+          startLoadTimeout()
         })
         .catch(() => {
-          if (!cancelled) failOver('Could not load the streaming player.')
+          if (!cancelled) {
+            startLoadTimeout()
+            failOver('Could not load the streaming player.')
+          }
         })
     } else {
       v.src = source.url
+      startLoadTimeout()
       start()
     }
 
     return () => {
       cancelled = true
+      window.clearTimeout(loadTimer)
+      window.clearTimeout(sourceTimeout.current)
+      sourceTimeout.current = undefined
       // Report before tearing down: resetting the element clears currentTime/duration.
       report()
       hls.current?.destroy()
       hls.current = null
+      setAudioTracks([])
+      setSubtitleTracks([])
       v.removeAttribute('src')
       v.load()
     }
-  }, [source, failOver, report])
+  }, [source, sourceIndex, sources.length, failOver, markPlaybackStarted, report])
 
   // Report progress periodically while playing.
   useEffect(() => {
@@ -212,6 +414,27 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
     }
   }
 
+  function chooseAudioTrack(track: TrackOption) {
+    if (!hls.current) return
+    hls.current.audioTrack = track.id
+    preferredAudioLanguage.current = track.language
+    writeTrackPreference(AUDIO_LANGUAGE_KEY, track.language)
+    setAudioTrack(track.id)
+    setTrackMenu(null)
+  }
+
+  function chooseSubtitleTrack(track: TrackOption | null) {
+    if (!hls.current) return
+    const id = track?.id ?? -1
+    hls.current.subtitleTrack = id
+    preferredSubtitleLanguage.current = track?.language
+    writeTrackPreference(SUBTITLE_LANGUAGE_KEY, track?.language)
+    syncTextTrackMode(id)
+    setSubtitleTrack(id)
+    setTrackMenu(null)
+    setMoreSubtitlesOpen(false)
+  }
+
   function onKey(e: React.KeyboardEvent) {
     const handled: Record<string, () => void> = {
       ' ': togglePlay,
@@ -265,14 +488,21 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
           report()
         }}
         onWaiting={() => setWaiting(true)}
-        onPlaying={() => setWaiting(false)}
-        onCanPlay={() => setWaiting(false)}
+        onPlaying={() => {
+          markPlaybackStarted()
+          setWaiting(false)
+        }}
+        onCanPlay={() => {
+          markPlaybackStarted()
+          setWaiting(false)
+        }}
         onLoadedMetadata={(e) => {
           const v = e.currentTarget
           setDuration(v.duration)
           if (!hls.current && resumeAt.current > 0 && resumeAt.current < v.duration - 5) v.currentTime = resumeAt.current
         }}
         onTimeUpdate={(e) => {
+          markPlaybackStarted()
           const v = e.currentTarget
           setTime(v.currentTime)
           if (v.buffered.length) setBuffered(v.buffered.end(v.buffered.length - 1))
@@ -387,6 +617,92 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
               )}
             </div>
           )}
+          {audioTracks.length > 1 && (
+            <div className="player__menu-wrap">
+                  <button
+                    className="icon-btn player__labelled"
+                    onClick={() => setTrackMenu((current) => (current === 'audio' ? null : 'audio'))}
+                    aria-haspopup="menu"
+                    aria-expanded={trackMenu === 'audio'}
+                    aria-label="Audio"
+                  >
+                    <Icon name="audio" /> <span>Audio</span>
+                  </button>
+                  {trackMenu === 'audio' && (
+                    <ul className="player__menu" role="menu" aria-label="Audio tracks">
+                      {audioTracks.map((track) => (
+                        <li key={track.id}>
+                          <button role="menuitemradio" aria-checked={track.id === audioTrack} onClick={() => chooseAudioTrack(track)}>
+                            {track.id === audioTrack && <Icon name="check" size={16} />} {track.label}
+                            {track.language && ` (${track.language})`}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+            </div>
+          )}
+          {subtitleTracks.length > 0 && (
+                <div className="player__menu-wrap">
+                  <button
+                    className="icon-btn player__labelled"
+                    onClick={() => setTrackMenu((current) => (current === 'subtitles' ? null : 'subtitles'))}
+                    aria-haspopup="menu"
+                    aria-expanded={trackMenu === 'subtitles'}
+                    aria-label="Subtitles"
+                  >
+                    <Icon name="captions" /> <span>CC</span>
+                  </button>
+                  {trackMenu === 'subtitles' && (
+                    <ul className="player__menu" role="menu" aria-label="Subtitle tracks">
+                      <li>
+                        <button role="menuitemradio" aria-checked={subtitleTrack === -1} onClick={() => chooseSubtitleTrack(null)}>
+                          {subtitleTrack === -1 && <Icon name="check" size={16} />} Off
+                        </button>
+                      </li>
+                      {englishSubtitles.map((track) => (
+                        <li key={track.id}>
+                          <button role="menuitemradio" aria-checked={track.id === subtitleTrack} onClick={() => chooseSubtitleTrack(track)}>
+                            {track.id === subtitleTrack && <Icon name="check" size={16} />} {track.label}
+                            {track.language && ` (${track.language})`}
+                          </button>
+                        </li>
+                      ))}
+                      {turkishSubtitles.map((track) => (
+                        <li key={track.id}>
+                          <button role="menuitemradio" aria-checked={track.id === subtitleTrack} onClick={() => chooseSubtitleTrack(track)}>
+                            {track.id === subtitleTrack && <Icon name="check" size={16} />} {track.label}
+                            {track.language && ` (${track.language})`}
+                          </button>
+                        </li>
+                      ))}
+                      {moreSubtitles.length > 0 && (
+                        <li>
+                          <button
+                            role="menuitem"
+                            aria-expanded={moreSubtitlesOpen}
+                            onClick={() => setMoreSubtitlesOpen((open) => !open)}
+                          >
+                            {moreSubtitlesOpen ? 'Less' : 'More'}
+                          </button>
+                          {moreSubtitlesOpen && (
+                            <ul className="player__menu player__menu--nested" role="group" aria-label="More subtitle tracks">
+                              {moreSubtitles.map((track) => (
+                                <li key={track.id}>
+                                  <button role="menuitemradio" aria-checked={track.id === subtitleTrack} onClick={() => chooseSubtitleTrack(track)}>
+                                    {track.id === subtitleTrack && <Icon name="check" size={16} />} {track.label}
+                                    {track.language && ` (${track.language})`}
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+              )}
           <button className="icon-btn" onClick={toggleFullscreen} aria-label={fullscreen ? 'Exit full screen' : 'Full screen'}>
             <Icon name={fullscreen ? 'exitFullscreen' : 'fullscreen'} />
           </button>

@@ -1,6 +1,7 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { getTitle } from '../providers'
 import type { MediaType } from '../providers'
+import { getCineProSources } from '../providers/cinepro'
 import { fetchList, getEpisodeVideos, getRecommendations, getSeason, searchTitles } from '../providers/tmdb'
 import type { RowDef } from './rows'
 
@@ -37,6 +38,19 @@ export function useSeason(tvId: number, season: number | undefined) {
     queryFn: ({ signal }) => getSeason(tvId, season!, signal),
     enabled: season !== undefined,
     staleTime: HOUR,
+  })
+}
+
+export function useCineProSources(
+  mediaType: MediaType | undefined,
+  tmdbId: number | undefined,
+  season?: number,
+  episode?: number,
+) {
+  return useQuery({
+    queryKey: ['cinepro-sources', mediaType, tmdbId, season, episode],
+    queryFn: ({ signal }) => getCineProSources(mediaType!, tmdbId!, season, episode, signal),
+    enabled: Boolean(mediaType && tmdbId && (mediaType === 'movie' || (season !== undefined && episode !== undefined))),
   })
 }
 

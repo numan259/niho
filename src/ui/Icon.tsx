@@ -15,6 +15,8 @@ const PATHS = {
     'M7 10v10H4V10zm0 0 4-7c1.5 0 2.5 1.2 2.2 2.7L12.6 9H18a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 16.8 20H7',
   volume: 'M4 9v6h4l5 4V5L8 9zm12.5-1.5a6 6 0 0 1 0 9M15 10a2.5 2.5 0 0 1 0 4',
   mute: 'M4 9v6h4l5 4V5L8 9zm12 0 5 6m0-6-5 6',
+  audio: 'M4 10v4h3l5 4V6l-5 4zm12.5-1.5a5 5 0 0 1 0 7M15 10.5a2 2 0 0 1 0 3',
+  captions: 'M4 6h16v12H4zM7 10h4M13 10h4M7 14h3M12 14h5',
   fullscreen: 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5',
   exitFullscreen: 'M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5',
   rewind: 'M11 7 6 12l5 5M18 7l-5 5 5 5',

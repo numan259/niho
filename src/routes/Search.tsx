@@ -131,7 +131,11 @@ function Recommended({ kids }: { kids: boolean }) {
               <Artwork src={resizeImage(t.backdrop, IMAGE_SIZES.thumb) ?? t.poster} title={t.name} className="list__art" />
               <span className="list__name">{t.name}</span>
             </Link>
-            <Link to={watchPath(t)} className="icon-btn list__play" aria-label={`Play trailer for ${t.name}`}>
+            <Link
+              to={t.mediaType === 'movie' ? watchPath(t) : titlePath(t)}
+              className="icon-btn list__play"
+              aria-label={t.mediaType === 'movie' ? `Play movie for ${t.name}` : `View episodes for ${t.name}`}
+            >
               <Icon name="play" />
             </Link>
           </li>

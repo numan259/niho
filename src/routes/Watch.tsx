@@ -1,6 +1,6 @@
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useEpisodeVideos, useSeason, useTitle } from '../catalog/queries'
-import { isMediaType, parseTmdbId, videoSources } from '../providers'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useCineProSources, useSeason, useTitle } from '../catalog/queries'
+import { isMediaType, parseTmdbId } from '../providers'
 import { useLibrary } from '../state/library'
 import { titlePath, watchPath } from '../ui/paths'
 import { VideoPlayer } from '../ui/player/VideoPlayer'
@@ -8,9 +8,8 @@ import { ErrorMessage, Message, Spinner } from '../ui/States'
 import { useGoBack } from '../ui/useGoBack'
 
 /**
- * /watch/movie/:id            → the film's best trailer
- * /watch/tv/:id               → the series trailer
- * /watch/tv/:id?s=1&e=3       → that episode's clip (season clip, then series trailer as fallbacks)
+ * /watch/movie/:id            → Streams movie via standalone embedded player
+ * /watch/tv/:id               → Streams series via standalone embedded player
  */
 export default function Watch() {
   const params = useParams()
@@ -26,11 +25,11 @@ export default function Watch() {
   const isEpisode = season !== undefined && episode !== undefined
 
   const title = useTitle(mediaType, tmdbId)
-  const clips = useEpisodeVideos(isEpisode ? tmdbId : undefined, season, episode)
   const seasonEpisodes = useSeason(tmdbId ?? 0, isEpisode ? season : undefined)
+  const streams = useCineProSources(mediaType, tmdbId, season, episode)
 
   if (!mediaType || !tmdbId) return <Message title="Title not found" />
-  if (title.isPending || (isEpisode && clips.isPending)) {
+  if (title.isPending || streams.isPending) {
     return (
       <div className="player player--loading">
         <Spinner />
@@ -38,18 +37,10 @@ export default function Watch() {
     )
   }
   if (title.error) return <ErrorMessage error={title.error} onRetry={() => title.refetch()} />
+  if (mediaType === 'tv' && !isEpisode) return <Message title="Select an episode to watch" />
+  if (streams.error) return <ErrorMessage error={streams.error} onRetry={() => streams.refetch()} />
   const t = title.data
   if (!t) return <Message title="Title not found" />
-
-  // Episode clips are rare on TMDB, so fall back to the show's own trailers.
-  const videos = clips.data?.length ? clips.data : t.videos
-  if (videos.length === 0) {
-    return (
-      <Message title="No trailer available" action={<Link className="btn btn--secondary" to={titlePath(t)}>Back to {t.name}</Link>}>
-        TMDB doesn’t list a playable trailer for this title yet.
-      </Message>
-    )
-  }
 
   const epIndex = isEpisode ? episode - 1 : 0
   const epCount = isEpisode ? (t.seasons.find((s) => s.number === season)?.episodeCount ?? episode) : 1
@@ -63,7 +54,7 @@ export default function Watch() {
   return (
     <VideoPlayer
       key={`${t.key}#${season ?? 0}-${episode ?? 0}`}
-      sources={videoSources(videos)}
+      sources={streams.data ?? []}
       title={t.name}
       subtitle={subtitle}
       poster={t.backdrop ?? t.poster}

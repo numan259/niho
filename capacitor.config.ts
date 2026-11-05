@@ -9,6 +9,7 @@ const config: CapacitorConfig = {
   backgroundColor: '#0d0d0f',
   android: {
     backgroundColor: '#0d0d0f',
+    allowMixedContent: true,
   },
   plugins: {
     // Light status/navigation bar icons on Niho's dark background.

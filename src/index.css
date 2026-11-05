@@ -1491,6 +1491,14 @@ a.card:hover {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.player__menu--nested {
+  position: static;
+  min-width: 0;
+  margin: 4px 0 0;
+  border: 0;
+  background: transparent;
+}
+
 .player__error {
   position: absolute;
   inset: 0;

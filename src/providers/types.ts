@@ -2,7 +2,7 @@ export type MediaType = 'movie' | 'tv'
 
 export interface Source {
   url: string
-  /** youtube = official YouTube embed (TMDB trailers); hls/mp4 = direct streams */
+  /** youtube = official YouTube embed; hls/mp4 = direct streams */
   type: 'mp4' | 'hls' | 'youtube'
   /** Label shown in the player's source menu, e.g. "Official Trailer" or "720p" */
   quality?: string

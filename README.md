@@ -1,92 +1,247 @@
-# niho.
+# Niho
 
-A mobile‑first film & TV discovery app with the familiar “rows of titles” experience — profiles, a featured
-billboard, carousels, title pages with seasons and episodes, search, a vertical trailer feed, My List and
-Continue Watching — plus **JustWatch‑style “Where to watch”** availability for your country.
+Niho is a mobile-first film and TV discovery interface built with React and
+TypeScript. It provides TMDB-powered discovery, title details, search,
+profiles, My List, Continue Watching, trailers, and optional CinePro HLS
+playback for movies and TV episodes.
 
-Built on the [TMDB API](https://www.themoviedb.org/documentation/api). Niho plays official trailers and
-shows where each title is legally available; it does not host or stream films. Ships as a web app (PWA) and a
-native Android app (Capacitor).
+Niho is a frontend application. It does not contain a media backend, scraper,
+database, user account service, or authentication server. Metadata comes from
+TMDB, trailers are embedded from YouTube, and direct playback is delegated to
+an externally running CinePro Core service.
 
 ## Features
 
-- **Discovery rows** from TMDB: trending this week, popular and top‑rated movies & series, genre rows
-- **Title pages**: backdrop, tagline, runtime / seasons, age rating for your region, TMDB score, director /
-  creators, cast, *More Like This* recommendations
-- **Where to watch**: stream / free / rent / buy providers for the viewer’s country (JustWatch data via TMDB)
-- **Trailer player**: official trailers in YouTube’s embedded player inside Niho’s player chrome — back,
-  title, trailer switcher, *Next episode*, resume where you left off
-- **Series**: season picker, episode list with stills; episode clips fall back to season / series trailers
-- **Continue Watching & My List** per profile, stored on the device (no accounts)
-- **Profiles** including a **Kids** profile (animation / family / kids genres, PG‑capped films)
-- **Clips**: vertical, swipeable feed of muted trailers
-- **Search** across movies and series with recent searches and infinite scroll
-- **PWA** + **Android app**, accessible labels throughout, reduced‑motion support
+- Discovery rows for trending, popular, top-rated, and genre titles
+- Movie and TV title pages with cast, ratings, seasons, episodes, and recommendations
+- TMDB search with infinite scrolling
+- Profiles, Kids profile filtering, My List, likes, and Continue Watching
+- Official YouTube trailer playback
+- Optional CinePro HLS playback for movies and TV episodes
+- HLS quality, audio-track, subtitle-track, seek, volume, and fullscreen controls
+- Responsive web app and Capacitor Android shell
+- PWA installability for production web builds
+- Unit tests, Playwright smoke tests, and Oxlint checks
+
+## Screenshots
+
+Screenshots are not currently included. Add project screenshots here before
+publishing a public release, for example:
+
+```text
+docs/screenshots/home.png
+docs/screenshots/title.png
+docs/screenshots/player.png
+```
 
 ## Architecture
 
+```mermaid
+flowchart LR
+  Browser["Web browser / PWA"] --> Niho["Niho React app"]
+  Android["Capacitor Android app"] --> Niho
+  Niho --> TMDB["TMDB API and image CDN"]
+  Niho --> YouTube["YouTube IFrame API"]
+  Niho --> CinePro["External CinePro Core HLS server"]
+  Niho --> Storage["Browser / Android local storage"]
 ```
-src/
-  providers/   TMDB client + pure mappers (lists, details, trailers, providers, seasons)
-  catalog/     Row definitions, page builder (sections + variants), TanStack Query hooks
-  state/       Zustand stores persisted per profile (profiles, My List, likes, progress)
-  ui/          Cards, rows, billboard, gallery, player (YouTube stage + hls.js/MP4 stream player)
-  routes/      Profiles, Home, Title, Watch, Search, Browse, Clips, My, About
-e2e/           Playwright tests with TMDB / YouTube mocked at the network layer
-android/       Capacitor Android project
+
+The `src/providers/tmdb.ts` module calls TMDB for metadata and images. The
+`src/providers/cinepro.ts` module constructs CinePro stream URLs. The player
+uses hls.js for browsers without native HLS and uses native HLS when hls.js is
+unavailable but the browser supports HLS.
+
+The CinePro service is external to this repository. Its expected endpoints
+are:
+
+```text
+http://<cinepro-host>:3000/streams/movie/{tmdbId}/master.m3u8
+http://<cinepro-host>:3000/streams/tv/{tmdbId}/{season}/{episode}/master.m3u8
 ```
 
-Key decisions:
+The current source contains a deployment-specific CinePro host. See
+[Configuration](docs/CONFIGURATION.md) before publishing or self-hosting.
 
-- **Numeric TMDB ids everywhere.** Titles are keyed `movie/27205` / `tv/1396`; routes are
-  `/title/:mediaType/:id` and `/watch/tv/:id?s=1&e=3`.
-- **Pure, tested mapping layer.** Raw TMDB JSON → app types in pure functions (trailer ranking, provider
-  grouping, certification by region, adult/person filtering, cross‑page de‑duplication), unit‑tested on
-  fixtures.
-- **Server‑driven‑style home page.** `Page → Section[]`, each section rendered by `variant`.
-- **Compliant trailer playback.** TMDB videos are YouTube ids, so they play through YouTube’s official
-  IFrame API (privacy‑enhanced host) rather than extracting streams; the API still reports position, so
-  progress and Continue Watching work. Direct HLS/MP4 sources keep using the native `<video>` + hls.js player.
-- **Progress rules as a reducer.** `applyProgress()` decides resume / next‑episode / finished.
-- **Deterministic e2e tests.** Playwright intercepts TMDB, its image CDN and YouTube and serves fixtures, so
-  CI needs no API key.
+## Prerequisites
 
-## Getting started
+### Web development
 
-1. Get a free TMDB key: create an account at themoviedb.org → **Settings → API** → request a developer key.
-2. Configure it (the file is git‑ignored):
+- Node.js 24 and npm, matching CI
+- Git
+- A TMDB account and API key or read access token
+- A reachable CinePro Core instance if direct playback is required
 
-   ```bash
-   cp .env.example .env.local
-   # then edit .env.local:
-   VITE_TMDB_API_KEY=<your "API Read Access Token" (eyJ…) or v3 API key>
-   ```
+Windows, macOS, and Linux are suitable for web development. A modern
+dual-core computer with at least 4 GB RAM is recommended; 8 GB RAM is
+recommended when running Android tooling and browsers together.
 
-3. Run:
+### Android development
 
-   ```bash
-   npm install
-   npm run dev          # http://localhost:5173
-   npm test             # unit tests (Vitest)
-   npm run test:e2e     # Playwright tests in local Chrome (mocked, no key needed)
-   npm run build        # production build in dist/
-   npm run android:apk  # debug APK in android/app/build/outputs/apk/debug/
-   ```
+- Android Studio or Android SDK command-line tools
+- Android SDK platform/build tools compatible with the Capacitor project
+- Java/JDK supported by the installed Android Gradle Plugin
+- A connected Android device with USB debugging enabled, or an emulator
 
-> Vite embeds `VITE_*` values in the built app, so the key is readable by anyone with the web build or APK.
-> TMDB keys are read‑only; for a public deployment put a small proxy in front of the API.
+Android builds are optional. The web application does not require Android
+Studio.
 
-The web app uses client‑side routing, so configure your host to serve `index.html` for unknown paths.
+## Installation
 
-## Credits
+```bash
+git clone <your-fork-or-repository-url>
+cd netflix
+npm ci
+```
 
-<img src="public/tmdb-logo.svg" alt="TMDB" width="160">
+Create local configuration from the safe template:
 
-This product uses the TMDB API but is not endorsed or certified by TMDB. Where‑to‑watch data is provided by
-JustWatch. Trailers are hosted by YouTube. Niho is a non‑commercial portfolio project and is not affiliated with
-any streaming service.
+```bash
+cp .env.example .env.local
+```
 
-## Tech
+On Windows PowerShell:
 
-React 19 · TypeScript · Vite · React Router · TanStack Query · Zustand · hls.js · YouTube IFrame API ·
-Capacitor · Vitest + Testing Library · Playwright · Oxlint
+```powershell
+Copy-Item .env.example .env.local
+```
+
+Edit `.env.local` and set `VITE_TMDB_API_KEY` to your own TMDB credential.
+Never commit `.env` or `.env.local`.
+
+Start the web app:
+
+```bash
+npm run dev
+```
+
+Open <http://localhost:5173>. Stop the development server with `Ctrl+C`.
+
+The project has no database migration or database setup step. Profiles,
+library state, and progress are stored locally on the device.
+
+## Configuration
+
+The complete environment-variable reference is in
+[docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+
+Only this environment variable is read by the application:
+
+```env
+VITE_TMDB_API_KEY=your_tmdb_api_key_here
+```
+
+Vite embeds `VITE_*` values into browser and Android builds. Treat the key as
+public/read-only application configuration, not as a server-side secret.
+
+The CinePro base URL is currently a source constant in
+`src/providers/cinepro.ts`, not an environment variable. Self-hosters must
+change that value and rebuild. Converting it to configurable deployment
+settings is a follow-up improvement, not part of this documentation-only
+release preparation.
+
+## Usage
+
+1. Start a reachable CinePro Core instance if playback is needed.
+2. Start Niho with `npm run dev`.
+3. Open the local web URL.
+4. Choose or create a local profile.
+5. Browse rows or search for a title.
+6. Open a movie or select a TV episode.
+7. Use the player controls for playback, quality, audio, subtitles, seeking,
+   volume, and fullscreen.
+
+For Android:
+
+```bash
+npm run android:apk
+```
+
+This builds the web app, synchronizes Capacitor assets, and produces a debug
+APK at `android/app/build/outputs/apk/debug/app-debug.apk`. Install it with
+Android tooling, for example:
+
+```bash
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+The Android shell bundles the web app. The phone must be able to reach both
+TMDB and the configured CinePro host. USB `adb reverse` can be used when
+CinePro is intentionally running on the development computer:
+
+```bash
+adb reverse tcp:3000 tcp:3000
+```
+
+## Development
+
+```text
+src/providers/     TMDB and CinePro integrations
+src/catalog/       Rows, page composition, and query hooks
+src/routes/        Application routes and screens
+src/ui/            Reusable UI, layouts, and video players
+src/state/         Local profile and library persistence
+e2e/               Playwright tests with mocked external services
+android/           Capacitor Android project
+scripts/           Build helpers
+```
+
+Useful commands:
+
+```bash
+npm run dev
+npm run build
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run preview
+npm run android:apk
+```
+
+The development server listens on port 5173 by default. Playwright starts an
+isolated test server on port 5174. Vite preview uses its standard preview port
+unless overridden.
+
+## Troubleshooting
+
+See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for missing-key,
+TMDB, CORS, network, Android cleartext, Tailscale, and HLS playback guidance.
+
+Common first checks:
+
+- Confirm `.env.local` exists and contains a non-placeholder TMDB key.
+- Restart Vite after changing environment files.
+- Confirm CinePro is reachable from the browser or phone.
+- Confirm the stream URL uses the configured CinePro host and the required
+  movie or TV path.
+- Check browser DevTools for CORS, mixed-content, and hls.js errors.
+
+## Security
+
+- Do not commit `.env`, `.env.local`, or real credentials.
+- `VITE_*` values are visible in built web and Android assets.
+- Do not expose CinePro or development servers directly to the public
+  internet without authentication, access controls, and HTTPS.
+- Prefer a private network or VPN such as Tailscale for development.
+- Review the security guidance in [SECURITY.md](SECURITY.md).
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+
+## Licensing and acknowledgements
+
+This repository currently has no project `LICENSE` file. Add a license before
+making a public release if you want others to have explicit permission to use,
+modify, and redistribute the project.
+
+Niho uses independently written application code plus third-party packages
+listed in `package.json` and `package-lock.json`, including React, Vite,
+React Router, TanStack Query, Zustand, hls.js, Capacitor, Vitest, Playwright,
+Oxlint, and the Bricolage Grotesque font package. Preserve each dependency's
+license and notices when redistributing.
+
+Niho uses the TMDB API and imagery, YouTube for embedded trailers, and
+JustWatch availability data exposed through TMDB. Niho is not endorsed or
+certified by TMDB, YouTube, JustWatch, or any streaming service.
+

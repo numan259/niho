@@ -95,8 +95,11 @@ function Billboard({ row }: { row: RowDef }) {
           {[t.mediaType === 'tv' ? 'Series' : 'Film', t.year, t.rating && `★ ${t.rating}`, ...t.tags.slice(0, 2)].filter(Boolean).join('  •  ')}
         </p>
         <div className="billboard__ctas">
-          <button className="btn btn--primary" onClick={() => navigate(watchPath(t))}>
-            <Icon name="play" size={20} /> Trailer
+          <button
+            className="btn btn--primary"
+            onClick={() => (t.mediaType === 'movie' ? navigate(watchPath(t)) : navigate(titlePath(t)))}
+          >
+            <Icon name="play" size={20} /> {t.mediaType === 'movie' ? 'Play movie' : 'View episodes'}
           </button>
           <button className="btn btn--secondary" onClick={() => lib.toggleMyList(t)} aria-pressed={inList}>
             <Icon name={inList ? 'check' : 'plus'} size={20} /> My List
