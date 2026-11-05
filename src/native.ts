@@ -8,6 +8,8 @@ export const isNative = Capacitor.isNativePlatform()
 export function setupNative() {
   if (!isNative) return
   App.addListener('backButton', ({ canGoBack }) => {
+    const exitFullscreen = new Event('niho:exit-fullscreen', { cancelable: true })
+    if (!window.dispatchEvent(exitFullscreen)) return
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => undefined)
     } else if (canGoBack) {

@@ -5,6 +5,8 @@ import { Icon } from '../Icon'
 import { formatClock } from './time'
 import { isHlsSource, usesNativePlayer } from './routing'
 import { YouTubeStage } from './YouTubeStage'
+import { usePlayerFullscreen } from './usePlayerFullscreen'
+import { SubtitleOverlay } from './SubtitleOverlay'
 
 export interface VideoPlayerProps {
   sources: Source[]
@@ -71,6 +73,8 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
   const hls = useRef<Hls | null>(null)
   const resumeAt = useRef(startAt)
   const hideTimer = useRef<number | undefined>(undefined)
+  const feedbackTimer = useRef<number | undefined>(undefined)
+  const lastTap = useRef<{ side: 'left' | 'right'; time: number } | null>(null)
   const sourceTimeout = useRef<number | undefined>(undefined)
   const playbackStarted = useRef(false)
   const preferredAudioLanguage = useRef<string | undefined>(readTrackPreference(AUDIO_LANGUAGE_KEY))
@@ -83,7 +87,8 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
   const [duration, setDuration] = useState(0)
   const [buffered, setBuffered] = useState(0)
   const [muted, setMuted] = useState(false)
-  const [fullscreen, setFullscreen] = useState(false)
+  const { fullscreen, toggleFullscreen } = usePlayerFullscreen(root, video)
+  const [seekFeedback, setSeekFeedback] = useState<'left' | 'right' | null>(null)
   const [controls, setControls] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [hlsLevels, setHlsLevels] = useState<QualityOption[]>([])
@@ -95,6 +100,7 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
   const [subtitleTrack, setSubtitleTrack] = useState(-1)
   const [trackMenu, setTrackMenu] = useState<'audio' | 'subtitles' | null>(null)
   const [moreSubtitlesOpen, setMoreSubtitlesOpen] = useState(false)
+  const controlsVisible = controls || !playing || menuOpen || trackMenu !== null
 
   // Keep latest callbacks in refs so effects don't re-run when parents re-render.
   const cb = useRef({ onProgress, onEnded })
@@ -139,17 +145,6 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
       label: trackLabel(track, `Track ${id + 1}`),
       language: track.lang ?? track.language,
     }))
-
-  const syncTextTrackMode = useCallback((selected: number) => {
-    const tracks = video.current?.textTracks
-    if (!tracks) return
-    for (let i = 0; i < tracks.length; i += 1) {
-      const track = tracks[i]
-      // TextTrack.mode is the browser API required to show or hide HLS captions.
-      // oxlint-disable-next-line react/immutability
-      if (track) track.mode = i === selected ? 'showing' : 'disabled'
-    }
-  }, [])
 
   const failOver = useCallback(
     (reason: string) => {
@@ -206,6 +201,7 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
           }
           console.info('[Niho HLS] FINAL_STREAM_URL', source.url)
           const h = new HlsJs({ startPosition: resumeAt.current || -1 })
+          h.subtitleDisplay = false
           hls.current = h
           const updateAudioTracks = () => {
             const tracks = toTrackOptions(h.audioTracks)
@@ -350,24 +346,50 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
       if (!video.current?.paused) setControls(false)
     }, HIDE_AFTER_MS)
   }, [])
-  useEffect(() => () => window.clearTimeout(hideTimer.current), [])
+  useEffect(() => () => {
+    window.clearTimeout(hideTimer.current)
+    window.clearTimeout(feedbackTimer.current)
+  }, [])
 
   const seekBy = useCallback(
     (sec: number) => {
       const v = video.current
-      if (!v) return
-      v.currentTime = Math.max(0, Math.min((v.duration || 0) - 1, v.currentTime + sec))
+      if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return
+      v.currentTime = Math.max(0, Math.min(v.duration, v.currentTime + sec))
+      setTime(v.currentTime)
       showControls()
     },
     [showControls],
   )
 
-  // Fullscreen state + media session (lock screen / headset controls).
-  useEffect(() => {
-    const onChange = () => setFullscreen(document.fullscreenElement === root.current)
-    document.addEventListener('fullscreenchange', onChange)
-    return () => document.removeEventListener('fullscreenchange', onChange)
-  }, [])
+  function onSurfaceClick(e: React.MouseEvent<HTMLDivElement>) {
+    if ((e.target as HTMLElement).closest('button, input, a, [role="menu"]')) {
+      lastTap.current = null
+      showControls()
+      return
+    }
+    showControls()
+    root.current?.focus({ preventScroll: true })
+    const bounds = e.currentTarget.getBoundingClientRect()
+    const fraction = (e.clientX - bounds.left) / bounds.width
+    const side = fraction < 0.4 ? 'left' : fraction > 0.6 ? 'right' : null
+    if (!side || error || menuOpen || trackMenu) {
+      lastTap.current = null
+      return
+    }
+    const now = performance.now()
+    if (lastTap.current?.side === side && now - lastTap.current.time < 350) {
+      lastTap.current = null
+      const v = video.current
+      if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return
+      seekBy(side === 'left' ? -10 : 10)
+      setSeekFeedback(side)
+      window.clearTimeout(feedbackTimer.current)
+      feedbackTimer.current = window.setTimeout(() => setSeekFeedback(null), 700)
+    } else {
+      lastTap.current = { side, time: now }
+    }
+  }
 
   useEffect(() => {
     if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return
@@ -392,15 +414,6 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
     if (!v) return
     v.muted = !v.muted
     setMuted(v.muted)
-  }
-
-  async function toggleFullscreen() {
-    const el = root.current
-    const v = video.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null
-    if (!el) return
-    if (document.fullscreenElement) await document.exitFullscreen().catch(() => undefined)
-    else if (el.requestFullscreen) await el.requestFullscreen().catch(() => undefined)
-    else v?.webkitEnterFullscreen?.()
   }
 
   function chooseQuality(option: QualityOption) {
@@ -429,13 +442,13 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
     hls.current.subtitleTrack = id
     preferredSubtitleLanguage.current = track?.language
     writeTrackPreference(SUBTITLE_LANGUAGE_KEY, track?.language)
-    syncTextTrackMode(id)
     setSubtitleTrack(id)
     setTrackMenu(null)
     setMoreSubtitlesOpen(false)
   }
 
   function onKey(e: React.KeyboardEvent) {
+    if ((e.target as HTMLElement).closest('button, input, a')) return
     const handled: Record<string, () => void> = {
       ' ': togglePlay,
       k: togglePlay,
@@ -463,9 +476,10 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
   return (
     <div
       ref={root}
-      className={`player ${controls || !playing ? 'player--controls' : ''}`}
-      onMouseMove={showControls}
-      onTouchStart={showControls}
+      className={`player player--stream ${controlsVisible ? 'player--controls' : ''}`}
+      onPointerMove={(e) => { if (e.pointerType === 'mouse') showControls() }}
+      onClick={onSurfaceClick}
+      onFocus={showControls}
       onKeyDown={onKey}
       tabIndex={-1}
       role="region"
@@ -477,7 +491,6 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
         poster={poster}
         playsInline
         preload="auto"
-        onClick={togglePlay}
         onPlay={() => {
           setPlaying(true)
           showControls()
@@ -517,6 +530,8 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
         }}
       />
 
+      <SubtitleOverlay video={video} controlsVisible={controlsVisible} hidden={Boolean(error)} />
+
       {waiting && !error && <div className="player__spinner spinner" aria-hidden="true" />}
 
       {error && (
@@ -530,7 +545,14 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
         </div>
       )}
 
-      <div className="player__top">
+      {seekFeedback && (
+        <div className={`player__seek-feedback player__seek-feedback--${seekFeedback}`} role="status">
+          <Icon name={seekFeedback === 'left' ? 'rewind' : 'forward'} size={32} />
+          <span>{seekFeedback === 'left' ? '−10' : '+10'} seconds</span>
+        </div>
+      )}
+
+      <div className="player__top" inert={!controlsVisible}>
         <button className="icon-btn icon-btn--lg" onClick={onBack} aria-label="Back">
           <Icon name="back" size={28} />
         </button>
@@ -540,15 +562,9 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
         </div>
       </div>
 
-      <div className="player__center">
-        <button className="icon-btn icon-btn--lg" onClick={() => seekBy(-10)} aria-label="Back 10 seconds">
-          <Icon name="rewind" size={32} />
-        </button>
+      <div className="player__center" inert={!controlsVisible || Boolean(error)}>
         <button className="player__big-play" onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'}>
           <Icon name={playing ? 'pause' : 'play'} size={40} />
-        </button>
-        <button className="icon-btn icon-btn--lg" onClick={() => seekBy(10)} aria-label="Forward 10 seconds">
-          <Icon name="forward" size={32} />
         </button>
       </div>
 
@@ -558,7 +574,7 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
         </button>
       )}
 
-      <div className="player__bottom">
+      <div className="player__bottom" inert={!controlsVisible}>
         <div className="player__scrub">
           <span className="player__time">{formatClock(time)}</span>
           <div className="player__bar">
@@ -581,9 +597,6 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
           <span className="player__time">-{formatClock(Math.max(0, duration - time))}</span>
         </div>
         <div className="player__buttons">
-          <button className="icon-btn" onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'}>
-            <Icon name={playing ? 'pause' : 'play'} />
-          </button>
           <button className="icon-btn" onClick={toggleMute} aria-label={muted ? 'Unmute' : 'Mute'}>
             <Icon name={muted ? 'mute' : 'volume'} />
           </button>

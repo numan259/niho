@@ -45,6 +45,10 @@ media stream.
 - Movie HLS: `/streams/movie/{tmdbId}/master.m3u8`
 - TV HLS: `/streams/tv/{tmdbId}/{season}/{episode}/master.m3u8`
 
-The current CinePro host is a hardcoded deployment value in
-`src/providers/cinepro.ts`. It should be made configurable before broad
-self-hosting.
+The CinePro host comes from `VITE_CINEPRO_URL`, defaulting to
+`http://localhost:3000`; `src/providers/cinepro.ts` constructs the stream URLs.
+
+The direct-stream player uses a custom subtitle overlay fed by active browser
+text-track cues. It positions captions within the displayed picture and above
+visible playback controls. Android fullscreen uses Capacitor Screen Orientation
+and System Bars; browser fullscreen uses the available web APIs.

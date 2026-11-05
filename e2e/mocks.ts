@@ -39,6 +39,8 @@ if (window.onYouTubeIframeAPIReady) window.onYouTubeIframeAPIReady();
 `
 
 export async function mockServices(page: Page) {
+  // Route-level checks do not depend on the developer's live CinePro server.
+  await page.route('**/streams/**', (route) => route.fulfill({ status: 503, body: 'Playback is mocked in route tests' }))
   await page.route('https://api.themoviedb.org/3/**', (route) => {
     const path = new URL(route.request().url()).pathname.replace(/^\/3/, '')
     let body: unknown = trending // lists, search, recommendations

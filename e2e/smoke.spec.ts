@@ -34,35 +34,42 @@ test('title page shows details, where to watch and cast', async ({ page }) => {
   await page.screenshot({ path: 'test-results/title.png', fullPage: true })
 })
 
-test('plays the official trailer and resumes it from Continue Watching', async ({ page }) => {
+test('opens the movie player and saves progress to Continue Watching', async ({ page }) => {
   await asProfile(page)
   await page.goto('/title/movie/27205')
-  await page.getByRole('button', { name: 'Play trailer', exact: true }).click()
+  await page.getByRole('button', { name: 'Play movie', exact: true }).click()
 
   await expect(page).toHaveURL(/\/watch\/movie\/27205$/)
-  const frame = page.locator('.player__frame iframe')
-  await expect(frame).toHaveAttribute('data-video-id', 'official-trailer')
-  await expect(frame).toHaveAttribute('src', /youtube-nocookie\.com\/embed\/official-trailer/)
+  const video = page.locator('video')
+  await expect(video).toBeVisible()
+  await expect(page.locator('.player__frame iframe')).toHaveCount(0)
 
-  // Watch 90 of 150 seconds, then leave: progress is saved on exit.
-  await page.evaluate(() => ((window as unknown as { __ytTime: number }).__ytTime = 90))
+  // Simulate pausing 90 seconds into a 150-second video, without live media.
+  await video.evaluate((media: HTMLVideoElement) => {
+    Object.defineProperty(media, 'duration', { configurable: true, value: 150 })
+    Object.defineProperty(media, 'currentTime', { configurable: true, writable: true, value: 90 })
+    media.dispatchEvent(new Event('loadedmetadata'))
+    media.dispatchEvent(new Event('timeupdate'))
+    media.dispatchEvent(new Event('pause'))
+  })
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('niho.library')!).state.libraries.me.progress['movie/27205']?.position)).toBe(90)
   await page.getByRole('button', { name: 'Back', exact: true }).click()
 
   await page.goto('/')
   const row = page.getByRole('region', { name: 'Continue Watching for Me' })
   await row.getByRole('link', { name: 'Play Inception, 1 min left' }).click()
-  await expect(page.locator('.player__frame iframe')).toHaveAttribute('data-start', '90')
+  await expect(page).toHaveURL(/\/watch\/movie\/27205$/)
+  await expect(video).toBeVisible()
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('niho.library')!).state.libraries.me.progress['movie/27205'].position)).toBe(90)
 })
 
-test('switches between a title’s trailers', async ({ page }) => {
+test('clips use the official YouTube trailer', async ({ page }) => {
   await asProfile(page)
-  await page.goto('/watch/movie/27205')
-  await page.getByRole('button', { name: 'Choose video' }).click()
-  await page.getByRole('menuitemradio', { name: /Teaser/ }).click()
-  await expect(page.locator('.player__frame iframe')).toHaveAttribute('data-video-id', 'teaser-key')
+  await page.goto('/clips')
+  await expect(page.getByTitle('Inception trailer')).toHaveAttribute('src', /youtube-nocookie\.com\/embed\/official-trailer/)
 })
 
-test('series: season episodes play a preview with S:E progress', async ({ page }) => {
+test('series: season episodes open the direct player with S:E details', async ({ page }) => {
   await asProfile(page)
   await page.goto('/title/tv/1396')
   await expect(page.getByRole('tab', { name: 'Episodes' })).toHaveAttribute('aria-selected', 'true')
@@ -71,8 +78,8 @@ test('series: season episodes play a preview with S:E progress', async ({ page }
   await page.getByRole('link', { name: 'Play preview for episode 1: Pilot' }).click()
   await expect(page).toHaveURL(/\/watch\/tv\/1396\?s=1&e=1$/)
   await expect(page.getByText('S1:E1 · Pilot')).toBeVisible()
-  // No episode clip on TMDB → falls back to the series trailer.
-  await expect(page.locator('.player__frame iframe')).toHaveAttribute('data-video-id', 'show-trailer')
+  await expect(page.locator('video')).toBeVisible()
+  await expect(page.locator('.player__frame iframe')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Next: S1:E2' })).toBeVisible()
 })
 

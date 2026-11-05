@@ -41,10 +41,10 @@ function TitleView({ title: t }: { title: TitleDetail }) {
   const entry = lib.progress[t.key]
   const inList = lib.inMyList(t.key)
   const liked = lib.isLiked(t.key)
-  const hasTrailer = t.videos.length > 0
   const isMovie = t.mediaType === 'movie'
   const resumeEp = entry?.season !== undefined ? { season: entry.season, episode: entry.episodeIndex + 1 } : undefined
   const firstEpisode = t.seasons[0] ? { season: t.seasons[0].number, episode: 1 } : undefined
+  const canPlay = isMovie || Boolean(resumeEp ?? firstEpisode)
   const play = () => navigate(watchPath(t, isMovie ? undefined : resumeEp ?? firstEpisode))
 
   const runtime = isSeries
@@ -75,8 +75,8 @@ function TitleView({ title: t }: { title: TitleDetail }) {
         <div className="title-page__back">
           <BackButton />
         </div>
-        {(isMovie || hasTrailer) && (
-          <button className="title-page__hero-play" onClick={play} aria-label={`Play ${isMovie ? 'movie' : 'trailer'} for ${t.name}`}>
+        {canPlay && (
+          <button className="title-page__hero-play" onClick={play} aria-label={`Play ${isMovie ? 'movie' : 'episode'} for ${t.name}`}>
             <Icon name="play" size={34} />
           </button>
         )}
@@ -96,11 +96,11 @@ function TitleView({ title: t }: { title: TitleDetail }) {
           )}
         </p>
 
-        {isMovie || hasTrailer ? (
+        {canPlay ? (
           <div className="title-page__primary">
             <button className="btn btn--primary btn--block" onClick={play}>
               <Icon name="play" size={22} />
-              {entry && !entry.upNext ? `Resume ${isMovie ? 'movie' : 'trailer'}` : `Play ${isMovie ? 'movie' : 'trailer'}`}
+              {entry && !entry.upNext ? `Resume ${isMovie ? 'movie' : 'episode'}` : `Play ${isMovie ? 'movie' : 'episode'}`}
             </button>
             {entry && !entry.upNext && entry.duration > 0 && (
               <div className="title-page__resume">
@@ -115,7 +115,7 @@ function TitleView({ title: t }: { title: TitleDetail }) {
             )}
           </div>
         ) : (
-          <p className="title-page__note">No trailer is listed for this title yet.</p>
+          <p className="title-page__note">No episodes are listed for this title yet.</p>
         )}
 
         {t.synopsis && (

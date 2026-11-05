@@ -37,6 +37,10 @@ Core URL without requiring the media service to be exposed publicly.
 - Official YouTube trailer playback
 - Optional CinePro HLS playback for movies and TV episodes
 - HLS quality, audio-track, subtitle-track, seek, volume, and fullscreen controls
+- Tap to reveal controls without pausing; a single central play/pause button
+- Double-tap or double-click the left/right side to skip back/forward 10 seconds
+- White, shadowed subtitles positioned inside the picture and above visible controls
+- Android landscape fullscreen with hidden system bars and Back-button exit
 - Responsive web app and Capacitor Android shell
 - PWA installability for production web builds
 - Unit tests, Playwright smoke tests, and Oxlint checks
@@ -77,8 +81,8 @@ http://<cinepro-host>:3000/streams/movie/{tmdbId}/master.m3u8
 http://<cinepro-host>:3000/streams/tv/{tmdbId}/{season}/{episode}/master.m3u8
 ```
 
-The current source contains a deployment-specific CinePro host. See
-[Configuration](docs/CONFIGURATION.md) before publishing or self-hosting.
+Set `VITE_CINEPRO_URL` to your CinePro host; it defaults to
+`http://localhost:3000`. See [Configuration](docs/CONFIGURATION.md).
 
 ## Prerequisites
 
@@ -97,7 +101,7 @@ recommended when running Android tooling and browsers together.
 
 - Android Studio or Android SDK command-line tools
 - Android SDK platform/build tools compatible with the Capacitor project
-- Java/JDK supported by the installed Android Gradle Plugin
+- Java/JDK 21 (Android Studio's bundled JBR can be used)
 - A connected Android device with USB debugging enabled, or an emulator
 
 Android builds are optional. The web application does not require Android
@@ -142,20 +146,20 @@ library state, and progress are stored locally on the device.
 The complete environment-variable reference is in
 [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
-Only this environment variable is read by the application:
+Configure these environment variables in `.env.local`:
 
 ```env
 VITE_TMDB_API_KEY=your_tmdb_api_key_here
+VITE_CINEPRO_URL=http://localhost:3000
 ```
 
 Vite embeds `VITE_*` values into browser and Android builds. Treat the key as
 public/read-only application configuration, not as a server-side secret.
 
-The CinePro base URL is currently a source constant in
-`src/providers/cinepro.ts`, not an environment variable. Self-hosters must
-change that value and rebuild. Converting it to configurable deployment
-settings is a follow-up improvement, not part of this documentation-only
-release preparation.
+`VITE_CINEPRO_URL` must be reachable from the device playing the video.
+On a phone, `localhost` refers to the phone itself; use your server's LAN/VPN
+address or USB port forwarding as described below. Restart Vite after changing
+configuration and rebuild the APK to apply changes to Android.
 
 ## Usage
 
@@ -169,6 +173,30 @@ release preparation.
 7. Use the player controls for playback, quality, audio, subtitles, seeking,
    volume, and fullscreen.
 
+### Player gestures and subtitles
+
+For CinePro movies and episodes, tap the picture to reveal the controls.
+Playback continues until you press the central pause button. Controls hide
+after three seconds while playing and stay visible while a settings menu is open.
+Double-tap (or double-click) the left/right side of the picture to seek back/forward
+10 seconds. The center of the picture is reserved for the play/pause control.
+
+Subtitles use centered white text with a dark shadow, preserve line breaks and
+basic formatting, and scale with the picture. They remain inside the video image
+when it has black bars and move above the timeline when controls appear.
+Choose a language or **Off** from the subtitle menu.
+
+On Android, fullscreen requests landscape orientation and hides the system bars.
+Exit fullscreen or press the Android Back button to release the orientation lock
+and restore the bars. Web fullscreen requests landscape where the browser supports
+it. Browsers using their own native fullscreen video player control caption layout
+and rotation themselves. YouTube trailers use YouTube's embedded controls.
+
+With the player focused, keyboard shortcuts are Space/K (play/pause), Left/J and
+Right/L (seek 10 seconds), M (mute), and F (fullscreen).
+
+### Android installation
+
 For Android:
 
 ```bash
@@ -181,6 +209,14 @@ Android tooling, for example:
 
 ```bash
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+The `-r` option updates an existing installation while preserving its app data.
+If Java 21 is not your default on Windows, use Android Studio's JBR for the build:
+
+```powershell
+$env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'
+npm run android:apk
 ```
 
 The Android shell bundles the web app. The phone must be able to reach both
@@ -213,6 +249,7 @@ npm run lint
 npm run typecheck
 npm test
 npm run test:e2e
+npx playwright test e2e/player.spec.ts
 npm run preview
 npm run android:apk
 ```
@@ -220,6 +257,11 @@ npm run android:apk
 The development server listens on port 5173 by default. Playwright starts an
 isolated test server on port 5174. Vite preview uses its standard preview port
 unless overridden.
+
+The focused player suite checks touch/mouse gestures, fullscreen, and subtitle
+layout in portrait and landscape using local media fixtures. It does not require
+a CinePro server. Real stream delivery and physical-device rotation should also
+be checked on your own setup.
 
 ## Troubleshooting
 
