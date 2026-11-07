@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import { VideoPlayer } from '../src/ui/player/VideoPlayer'
 import '../src/index.css'
+import { usePlaybackPreferences } from '../src/state/playback'
 
 // Deterministic media clock for browser gesture/layout checks; no external streams.
 export function PlayerHarness() {
@@ -22,6 +23,7 @@ export function PlayerHarness() {
     video.dispatchEvent(new Event('play'))
     video.dispatchEvent(new Event('playing'))
     if (new URLSearchParams(location.search).has('captions')) {
+      usePlaybackPreferences.getState().update({ subtitleLanguage: 'en' })
       // A real local video clock exercises browser cue activation and cuechange.
       const canvas = document.createElement('canvas')
       canvas.width = 1920
@@ -49,7 +51,7 @@ export function PlayerHarness() {
       }
     }
   }, [])
-  return <VideoPlayer sources={[]} title="The Mentalist" subtitle="S1:E1 · Nothing But Blue Skies" onBack={() => {}} onProgress={() => {}} onEnded={() => {}} next={{ label: 'Next episode', onSelect: () => {} }} />
+  return <VideoPlayer sources={[]} title="The Mentalist" subtitle="S1:E1 · Nothing But Blue Skies" onBack={() => {}} onProgress={(position, duration) => { sessionStorage.setItem('test-progress', JSON.stringify({ position, duration })) }} onEnded={() => {}} next={{ label: 'Next episode', onSelect: () => { sessionStorage.setItem('test-next', 'played') } }} />
 }
 
 createRoot(document.getElementById('root')!).render(<PlayerHarness />)

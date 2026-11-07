@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
+import { asProfile, mockServices } from './mocks'
 
-test('touch reveals controls; side double taps seek; only the center button pauses', async ({ page }) => {
+test('single taps toggle controls while playing or paused; side double taps seek', async ({ page }) => {
   await page.goto('/e2e/player.html')
   const player = page.getByRole('region')
   const video = page.locator('video')
@@ -18,6 +19,44 @@ test('touch reveals controls; side double taps seek; only the center button paus
   await expect(video).toHaveJSProperty('currentTime', 120)
   await page.getByRole('button', { name: 'Pause', exact: true }).tap()
   await expect(video).toHaveJSProperty('paused', true)
+  // The paused frame should allow the same reveal/hide gesture as playback.
+  await page.touchscreen.tap(bounds.width / 2, bounds.height * 0.3)
+  await expect(player).not.toHaveClass(/player--controls/)
+  await expect(page.locator('.player__bottom')).toHaveAttribute('inert', '')
+  await expect(video).toHaveJSProperty('paused', true)
+  await page.waitForTimeout(400) // Two independent single taps, not a double tap.
+  await page.touchscreen.tap(bounds.width / 2, bounds.height * 0.3)
+  await expect(player).toHaveClass(/player--controls/)
+  await expect(video).toHaveJSProperty('paused', true)
+  await page.getByRole('button', { name: 'Play', exact: true }).tap()
+  await page.touchscreen.tap(bounds.width / 2, bounds.height * 0.3)
+  await expect(player).not.toHaveClass(/player--controls/)
+  await expect(video).toHaveJSProperty('paused', false)
+  await page.waitForTimeout(400)
+  await page.touchscreen.tap(bounds.width / 2, bounds.height * 0.3)
+  await expect(player).toHaveClass(/player--controls/)
+})
+
+test('middle double taps toggle playback with controls hidden or visible', async ({ page }) => {
+  await page.goto('/e2e/player.html')
+  const player = page.getByRole('region')
+  const video = page.locator('video')
+  const bounds = (await video.boundingBox())!
+  await expect(player).not.toHaveClass(/player--controls/)
+  // First tap reveals the center button; the second must still toggle only once.
+  await page.touchscreen.tap(bounds.width / 2, bounds.height / 2)
+  await page.touchscreen.tap(bounds.width / 2, bounds.height / 2)
+  await expect(video).toHaveJSProperty('paused', true)
+  await page.waitForTimeout(400)
+  await page.touchscreen.tap(bounds.width / 2, bounds.height / 2)
+  await page.touchscreen.tap(bounds.width / 2, bounds.height / 2)
+  await expect(video).toHaveJSProperty('paused', false)
+  await page.waitForTimeout(400)
+  // The rest of the middle third supports the same gesture away from the button.
+  await page.touchscreen.tap(bounds.width / 2, bounds.height * 0.3)
+  await page.touchscreen.tap(bounds.width / 2, bounds.height * 0.3)
+  await expect(video).toHaveJSProperty('paused', true)
+  await expect(video).toHaveJSProperty('currentTime', 120)
 })
 
 test('landscape controls fit and mouse double-click seeks without toggling playback', async ({ page }) => {
@@ -59,4 +98,83 @@ test('subtitles follow the picture, clear the controls, and disappear when disab
   await page.screenshot({ path: 'test-results/subtitles-portrait.png' })
   await page.locator('video').evaluate((video: HTMLVideoElement) => { video.textTracks[0].mode = 'disabled' })
   await expect(captions).not.toBeVisible()
+})
+
+test('hold for 2x restores speed without seeking or pausing on release', async ({ page }) => {
+  await page.goto('/e2e/player.html')
+  const video = page.locator('video')
+  await page.mouse.move(60, 250)
+  await page.mouse.down()
+  await expect(video).toHaveJSProperty('playbackRate', 2)
+  await expect(page.getByText(/2× speed/)).toBeVisible()
+  await page.screenshot({ path: 'test-results/player-hold.png' })
+  await page.mouse.up()
+  await expect(video).toHaveJSProperty('playbackRate', 1)
+  await expect(video).toHaveJSProperty('paused', false)
+  await expect(video).toHaveJSProperty('currentTime', 120)
+})
+
+test('screen lock blocks taps and holds until confirmed unlock', async ({ page }) => {
+  await page.goto('/e2e/player.html')
+  const video = page.locator('video')
+  await page.getByRole('button', { name: 'Lock controls', exact: true }).tap()
+  await page.touchscreen.tap(60, 250)
+  await page.touchscreen.tap(60, 250)
+  await page.mouse.move(60, 250)
+  await page.mouse.down()
+  await page.waitForTimeout(600)
+  await expect(video).toHaveJSProperty('playbackRate', 1)
+  await page.mouse.up()
+  await expect(video).toHaveJSProperty('paused', false)
+  await expect(video).toHaveJSProperty('currentTime', 120)
+  await page.getByRole('button', { name: 'Unlock controls', exact: true }).tap()
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Tap again to unlock' }).tap()
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible()
+})
+
+test('touch hold restores the previous speed on release and touch cancellation', async ({ page }) => {
+  await page.goto('/e2e/player.html')
+  const video = page.locator('video')
+  await video.evaluate((media: HTMLVideoElement) => { media.playbackRate = 1.25 })
+  const touch = await page.context().newCDPSession(page)
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 60, y: 250 }] })
+  await expect(video).toHaveJSProperty('playbackRate', 2)
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await expect(video).toHaveJSProperty('playbackRate', 1.25)
+  await expect(video).toHaveJSProperty('paused', false)
+  await expect(video).toHaveJSProperty('currentTime', 120)
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 330, y: 250 }] })
+  await expect(video).toHaveJSProperty('playbackRate', 2)
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] })
+  await expect(video).toHaveJSProperty('playbackRate', 1.25)
+  await touch.detach()
+})
+
+test('preferences persist after reloading the player', async ({ page }) => {
+  await page.goto('/e2e/player.html')
+  await page.getByRole('button', { name: 'Playback settings' }).tap()
+  await page.getByLabel('Preferred audio').selectOption('tr')
+  await page.getByLabel('Preferred subtitles').selectOption('en')
+  await page.getByRole('button', { name: 'large', exact: true }).tap()
+  await page.getByRole('checkbox').uncheck()
+  await page.screenshot({ path: 'test-results/player-settings.png' })
+  await page.reload()
+  await page.getByRole('button', { name: 'Playback settings' }).tap()
+  await expect(page.getByLabel('Preferred audio')).toHaveValue('tr')
+  await expect(page.getByLabel('Preferred subtitles')).toHaveValue('en')
+  await expect(page.getByRole('button', { name: 'large', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('checkbox')).not.toBeChecked()
+})
+
+test('episodes can be selected from the player even when a stream fails', async ({ page }) => {
+  await mockServices(page)
+  await asProfile(page)
+  await page.goto('/watch/tv/1396?s=1&e=1')
+  await page.getByRole('button', { name: 'Choose episode', exact: true }).click()
+  const panel = page.getByRole('dialog', { name: 'Episodes', exact: true })
+  await expect(panel.getByRole('button', { name: 'Play S1:E1: Pilot' })).toHaveAttribute('aria-current', 'true')
+  await page.screenshot({ path: 'test-results/player-episodes.png' })
+  await panel.getByRole('button', { name: /^Play S1:E2:/ }).click()
+  await expect(page).toHaveURL(/s=1&e=2$/)
 })

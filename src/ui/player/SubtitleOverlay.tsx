@@ -16,10 +16,11 @@ function cueContent(node: Node, key: number): ReactNode {
   return <span key={key}>{children}</span>
 }
 
-export function SubtitleOverlay({ video, controlsVisible, hidden }: {
+export function SubtitleOverlay({ video, controlsVisible, hidden, size = 'medium' }: {
   video: RefObject<HTMLVideoElement | null>
   controlsVisible: boolean
   hidden: boolean
+  size?: 'small' | 'medium' | 'large'
 }) {
   const [cues, setCues] = useState<VTTCue[]>([])
   const [nativeFullscreen, setNativeFullscreen] = useState(false)
@@ -129,7 +130,7 @@ export function SubtitleOverlay({ video, controlsVisible, hidden }: {
   return (
     <div className="player__subtitle-frame" hidden={hidden || nativeFullscreen || !cues.length}
       style={{ left: layout.left, top: layout.top, width: layout.width, height: layout.height }}>
-      <div className="player__captions" style={{ bottom: layout.bottom, fontSize: layout.fontSize }}>
+      <div className="player__captions" style={{ bottom: layout.bottom, fontSize: layout.fontSize * ({ small: 0.85, medium: 1, large: 1.3 }[size]) }}>
         {cues.map((cue, index) => <div key={`${cue.id}-${cue.startTime}-${index}`} dir="auto">{cueContent(cue.getCueAsHTML(), index)}</div>)}
       </div>
     </div>

@@ -17,20 +17,23 @@ interface Props {
 
 /** Image with a generated gradient + title fallback for missing / broken artwork. */
 export function Artwork({ src, title, className = '', priority = false }: Props) {
-  const [failed, setFailed] = useState(false)
+  const [failedSrc, setFailedSrc] = useState<string>()
+  const [loadedSrc, setLoadedSrc] = useState<string>()
   const hue = hueOf(title)
   return (
     <div
       className={`artwork ${className}`}
       style={{ background: `linear-gradient(160deg, hsl(${hue} 45% 28%), hsl(${(hue + 40) % 360} 50% 12%))` }}
     >
-      {src && !failed ? (
+      {src && failedSrc !== src ? (
         <img
           src={src}
           alt=""
           loading={priority ? 'eager' : 'lazy'}
           decoding="async"
-          onError={() => setFailed(true)}
+          className={loadedSrc === src ? 'artwork__image--loaded' : 'artwork__image--loading'}
+          onLoad={() => setLoadedSrc(src)}
+          onError={() => setFailedSrc(src)}
         />
       ) : (
         <span className="artwork__fallback">{title}</span>

@@ -37,9 +37,17 @@ Core URL without requiring the media service to be exposed publicly.
 - Official YouTube trailer playback
 - Optional CinePro HLS playback for movies and TV episodes
 - HLS quality, audio-track, subtitle-track, seek, volume, and fullscreen controls
-- Tap to reveal controls without pausing; a single central play/pause button
+- Tap to show or hide controls, even while paused; a single central play/pause button
 - Double-tap or double-click the left/right side to skip back/forward 10 seconds
+- Double-tap or double-click the middle third to toggle play/pause
+- Hold the picture for temporary 2× playback; release to restore the previous speed
+- Screen lock prevents accidental touches, with a two-step unlock
+- In-player episode picker, next-season continuation, and optional autoplay countdown
+- Saved audio/subtitle language, subtitle size, and autoplay preferences
+- Progress saved on pause, seeking, leaving playback, and app backgrounding
+- Automatic stream recovery with buffering feedback and a retry button
 - White, shadowed subtitles positioned inside the picture and above visible controls
+- Artwork fades, loading skeletons, and reduced-motion support
 - Android landscape fullscreen with hidden system bars and Back-button exit
 - Responsive web app and Capacitor Android shell
 - PWA installability for production web builds
@@ -175,11 +183,34 @@ configuration and rebuild the APK to apply changes to Android.
 
 ### Player gestures and subtitles
 
-For CinePro movies and episodes, tap the picture to reveal the controls.
-Playback continues until you press the central pause button. Controls hide
+For CinePro movies and episodes, tap the picture to show or hide all controls,
+even while paused. Tapping the picture does not change playback; use the central
+play/pause button for that. Controls also hide automatically
 after three seconds while playing and stay visible while a settings menu is open.
 Double-tap (or double-click) the left/right side of the picture to seek back/forward
-10 seconds. The center of the picture is reserved for the play/pause control.
+10 seconds. Double-tap the middle third to toggle play/pause. The visible central
+play/pause button also works with a single tap.
+
+While playing, hold the picture for about half a second to play at **2× speed**.
+Release to restore the previous speed. Sliding before the hold activates cancels
+it; releasing a hold does not toggle the controls or pause the video.
+
+Use **Lock controls** to prevent accidental gestures. Tap the picture to reveal
+**Unlock controls**, then tap that button and **Tap again to unlock** to unlock.
+Open **Playback settings** to save audio/subtitle language, subtitle size, and
+autoplay preferences on this device. A missing preferred language falls back to
+the stream's default audio or no subtitles.
+
+For TV, **Episodes** opens a season and episode picker without leaving the player.
+At the end of an episode, autoplay offers a cancellable 10-second countdown and
+continues into the next available season. Disable autoplay in Playback settings
+to choose when to continue. The countdown pauses while the app is in the
+background or the player is locked or showing a settings/episode sheet.
+
+Watch progress is saved every five seconds during playback and immediately on
+pause, seeking, leaving the player, and moving the app into the background.
+Interrupted HLS streams attempt recovery; if recovery fails, **Retry playback**
+reloads the stream at the last position.
 
 Subtitles use centered white text with a dark shadow, preserve line breaks and
 basic formatting, and scale with the picture. They remain inside the video image
@@ -258,8 +289,10 @@ The development server listens on port 5173 by default. Playwright starts an
 isolated test server on port 5174. Vite preview uses its standard preview port
 unless overridden.
 
-The focused player suite checks touch/mouse gestures, fullscreen, and subtitle
-layout in portrait and landscape using local media fixtures. It does not require
+The focused player suite checks touch/mouse gestures, hold-to-speed, screen lock,
+saved preferences, episode selection, fullscreen, and subtitle layout in portrait
+and landscape using local media fixtures. Unit tests also cover progress saving,
+autoplay, next-season selection, and bounded stream recovery. Tests do not require
 a CinePro server. Real stream delivery and physical-device rotation should also
 be checked on your own setup.
 

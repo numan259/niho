@@ -44,16 +44,15 @@ test('opens the movie player and saves progress to Continue Watching', async ({ 
   await expect(video).toBeVisible()
   await expect(page.locator('.player__frame iframe')).toHaveCount(0)
 
-  // Simulate pausing 90 seconds into a 150-second video, without live media.
+  // Leaving without pausing must still persist the exact final position.
   await video.evaluate((media: HTMLVideoElement) => {
     Object.defineProperty(media, 'duration', { configurable: true, value: 150 })
     Object.defineProperty(media, 'currentTime', { configurable: true, writable: true, value: 90 })
     media.dispatchEvent(new Event('loadedmetadata'))
     media.dispatchEvent(new Event('timeupdate'))
-    media.dispatchEvent(new Event('pause'))
   })
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('niho.library')!).state.libraries.me.progress['movie/27205']?.position)).toBe(90)
   await page.getByRole('button', { name: 'Back', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('niho.library')!).state.libraries.me.progress['movie/27205']?.position)).toBe(90)
 
   await page.goto('/')
   const row = page.getByRole('region', { name: 'Continue Watching for Me' })

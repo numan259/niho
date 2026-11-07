@@ -7,6 +7,11 @@ import { isHlsSource, usesNativePlayer } from './routing'
 import { YouTubeStage } from './YouTubeStage'
 import { usePlayerFullscreen } from './usePlayerFullscreen'
 import { SubtitleOverlay } from './SubtitleOverlay'
+import { languageMatches, usePlaybackPreferences } from '../../state/playback'
+import { useWatchProgress } from './useWatchProgress'
+import { useHoldSpeed } from './useHoldSpeed'
+import { PlaybackSettings } from './PlaybackSettings'
+import { EpisodePicker, type EpisodePickerProps } from './EpisodePicker'
 
 export interface VideoPlayerProps {
   sources: Source[]
@@ -20,6 +25,7 @@ export interface VideoPlayerProps {
   onProgress: (position: number, duration: number) => void
   onEnded: () => void
   next?: { label: string; onSelect: () => void }
+  episodes?: EpisodePickerProps
   sourcePage?: string
 }
 
@@ -36,28 +42,8 @@ interface TrackOption {
 }
 
 const HIDE_AFTER_MS = 3000
-const REPORT_EVERY_MS = 5000
 const UP_NEXT_SEC = 25
 const STREAM_LOAD_TIMEOUT_MS = 15000
-const AUDIO_LANGUAGE_KEY = 'niho.audioLanguage'
-const SUBTITLE_LANGUAGE_KEY = 'niho.subtitleLanguage'
-
-function readTrackPreference(key: string): string | undefined {
-  try {
-    return sessionStorage.getItem(key) ?? undefined
-  } catch {
-    return undefined
-  }
-}
-
-function writeTrackPreference(key: string, value: string | undefined) {
-  try {
-    if (value) sessionStorage.setItem(key, value)
-    else sessionStorage.removeItem(key)
-  } catch {
-    // Track preferences are optional when storage is unavailable.
-  }
-}
 
 /**
  * Single entry point for playback. TMDB trailers (YouTube) play in YouTube's
@@ -67,18 +53,30 @@ export function VideoPlayer(props: VideoPlayerProps) {
   return usesNativePlayer(props.sources[0]) ? <StreamPlayer {...props} /> : <YouTubeStage {...props} />
 }
 
-function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, onProgress, onEnded, next, sourcePage }: VideoPlayerProps) {
+function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, onProgress, onEnded, next, episodes, sourcePage }: VideoPlayerProps) {
   const root = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
   const hls = useRef<Hls | null>(null)
   const resumeAt = useRef(startAt)
   const hideTimer = useRef<number | undefined>(undefined)
   const feedbackTimer = useRef<number | undefined>(undefined)
-  const lastTap = useRef<{ side: 'left' | 'right'; time: number } | null>(null)
+  const lastTap = useRef<{ side: 'left' | 'center' | 'right'; time: number } | null>(null)
+  const lastPlayButtonTap = useRef<number | null>(null)
   const sourceTimeout = useRef<number | undefined>(undefined)
   const playbackStarted = useRef(false)
-  const preferredAudioLanguage = useRef<string | undefined>(readTrackPreference(AUDIO_LANGUAGE_KEY))
-  const preferredSubtitleLanguage = useRef<string | undefined>(readTrackPreference(SUBTITLE_LANGUAGE_KEY))
+  const preferences = usePlaybackPreferences()
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [episodesOpen, setEpisodesOpen] = useState(false)
+  const [locked, setLocked] = useState(false)
+  const [unlockArmed, setUnlockArmed] = useState(false)
+  const [lockHint, setLockHint] = useState(false)
+  const lockTimer = useRef<number | undefined>(undefined)
+  const [reload, setReload] = useState(0)
+  const [recovering, setRecovering] = useState(false)
+  const [ended, setEnded] = useState(false)
+  const [countdown, setCountdown] = useState(10)
+  const [autoplayCancelled, setAutoplayCancelled] = useState(false)
+  const hasNext = Boolean(next)
 
   const [sourceIndex, setSourceIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -100,23 +98,22 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
   const [subtitleTrack, setSubtitleTrack] = useState(-1)
   const [trackMenu, setTrackMenu] = useState<'audio' | 'subtitles' | null>(null)
   const [moreSubtitlesOpen, setMoreSubtitlesOpen] = useState(false)
-  const controlsVisible = controls || !playing || menuOpen || trackMenu !== null
+  const controlsVisible = !locked && (controls || menuOpen || trackMenu !== null || settingsOpen || episodesOpen)
+  const hold = useHoldSpeed(video, locked || Boolean(error) || settingsOpen || episodesOpen || menuOpen || trackMenu !== null)
 
   // Keep latest callbacks in refs so effects don't re-run when parents re-render.
-  const cb = useRef({ onProgress, onEnded })
+  const cb = useRef({ onProgress, onEnded, next })
   useEffect(() => {
-    cb.current = { onProgress, onEnded }
+    cb.current = { onProgress, onEnded, next }
   })
 
-  const report = useCallback(() => {
-    const v = video.current
-    if (v && v.duration && Number.isFinite(v.duration)) cb.current.onProgress(v.currentTime, v.duration)
-  }, [])
+  const report = useWatchProgress(video, startAt, onProgress)
 
   const markPlaybackStarted = useCallback(() => {
     playbackStarted.current = true
     window.clearTimeout(sourceTimeout.current)
     sourceTimeout.current = undefined
+    setRecovering(false)
   }, [])
 
   const source = sources[sourceIndex]
@@ -150,31 +147,109 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
     (reason: string) => {
       if (video.current) resumeAt.current = video.current.currentTime || resumeAt.current
       if (sourceIndex + 1 < sources.length) setSourceIndex(sourceIndex + 1)
-      else setError(reason)
+      else {
+        window.clearTimeout(sourceTimeout.current)
+        hls.current?.stopLoad()
+        video.current?.pause()
+        setError(reason)
+        setWaiting(false)
+        setRecovering(false)
+        setLocked(false)
+        setControls(true)
+      }
     },
     [sourceIndex, sources.length],
   )
 
-  // Attach the current source (HLS via hls.js where needed, MP4 natively).
+  const retryStream = useCallback(() => {
+    report()
+    if (video.current?.currentTime) resumeAt.current = video.current.currentTime
+    setError(null)
+    setEnded(false)
+    setRecovering(true)
+    setReload((value) => value + 1)
+  }, [report])
+
   useEffect(() => {
-    const v = video.current
-    if (!v || !source) return
-    let cancelled = false
-    let retriedNetwork = false
-    let loadTimer: number | undefined
-    playbackStarted.current = false
-    const startLoadTimeout = () => {
-      window.clearTimeout(loadTimer)
-      loadTimer = window.setTimeout(() => {
-        if (cancelled || playbackStarted.current || !v.paused || v.currentTime > 0) return
-        console.warn('[Niho HLS] SOURCE_TIMEOUT', {
-          url: source.url,
-          action: sourceIndex + 1 < sources.length ? 'trying_next_source' : 'showing_error',
-        })
-        failOver('The CinePro stream did not start playing within 15 seconds.')
-      }, STREAM_LOAD_TIMEOUT_MS)
-      sourceTimeout.current = loadTimer
+    const h = hls.current
+    if (!h) return
+    const preferredAudio = h.audioTracks.findIndex((track) => languageMatches(track.lang, preferences.audioLanguage))
+    const audio = preferredAudio >= 0 ? preferredAudio : Math.max(0, h.audioTracks.findIndex((track) => track.default))
+    if (audio >= 0) { h.audioTrack = audio; setAudioTrack(audio) }
+    const subtitles = h.subtitleTracks.findIndex((track) => languageMatches(track.lang, preferences.subtitleLanguage))
+    h.subtitleTrack = subtitles
+    setSubtitleTrack(subtitles)
+  }, [preferences.audioLanguage, preferences.subtitleLanguage])
+
+  useEffect(() => {
+    const media = video.current
+    if (!media) return
+    const sync = () => {
+      if (hls.current) return
+      const tracks = Array.from(media.textTracks).map((track, id) => ({ track, id }))
+        .filter(({ track }) => track.kind === 'subtitles' || track.kind === 'captions')
+      const selected = tracks.find(({ track }) => languageMatches(track.language, usePlaybackPreferences.getState().subtitleLanguage))?.id ?? -1
+      tracks.forEach(({ track, id }) => {
+        const mode = id === selected ? 'hidden' : 'disabled'
+        if (track.mode !== mode) track.mode = mode
+      })
+      setSubtitleTracks(tracks.map(({ track, id }) => ({ id, label: track.label || track.language || `Track ${id + 1}`, language: track.language })))
+      setSubtitleTrack(selected)
     }
+    media.textTracks.addEventListener('addtrack', sync)
+    media.textTracks.addEventListener('removetrack', sync)
+    media.addEventListener('loadedmetadata', sync)
+    sync()
+    return () => {
+      media.textTracks.removeEventListener('addtrack', sync)
+      media.textTracks.removeEventListener('removetrack', sync)
+      media.removeEventListener('loadedmetadata', sync)
+    }
+  }, [preferences.subtitleLanguage])
+
+  useEffect(() => {
+    if (!ended || !hasNext || !preferences.autoplay || autoplayCancelled || locked || settingsOpen || episodesOpen) return
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'hidden') setCountdown((value) => Math.max(0, value - 1))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [ended, hasNext, preferences.autoplay, autoplayCancelled, locked, settingsOpen, episodesOpen])
+
+  useEffect(() => {
+    if (ended && countdown === 0 && preferences.autoplay && !autoplayCancelled && !locked && !settingsOpen && !episodesOpen) {
+      // oxlint-disable-next-line react/set-state-in-effect -- consume the completed countdown once before navigating.
+      setEnded(false)
+      report()
+      cb.current.next?.onSelect()
+    }
+  }, [ended, countdown, preferences.autoplay, autoplayCancelled, locked, settingsOpen, episodesOpen, report])
+
+  // Bound recovery attempts so a broken stream always reaches a useful Retry state.
+  useEffect(() => {
+    const media = video.current
+    if (!media || !source) return
+    let cancelled = false
+    let stream: Hls | null = null
+    let networkRetries = 0
+    let mediaRetries = 0
+    let stallRetries = 0
+    let lastPosition = media.currentTime
+    let lastAdvance = Date.now()
+    playbackStarted.current = false
+    const armTimeout = () => {
+      window.clearTimeout(sourceTimeout.current)
+      sourceTimeout.current = window.setTimeout(() => {
+        if (!cancelled) failOver('The stream is taking too long to respond. Check your connection and try again.')
+      }, STREAM_LOAD_TIMEOUT_MS)
+    }
+    const start = () => media.play().catch(() => {
+      // Autoplay denial is not a stream failure; let the user press Play.
+      if (cancelled) return
+      window.clearTimeout(sourceTimeout.current)
+      setPlaying(false)
+      setWaiting(false)
+      setControls(true)
+    })
     setError(null)
     setWaiting(true)
     setHlsLevels([])
@@ -184,160 +259,106 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
     setSubtitleTrack(-1)
     setTrackMenu(null)
     setMoreSubtitlesOpen(false)
-    const start = () => v.play().catch(() => setPlaying(false))
+    armTimeout()
 
     if (isHlsSource(source)) {
-      import('hls.js')
-        .then(({ default: HlsJs }) => {
-          if (cancelled) return
-          if (!HlsJs.isSupported()) {
-            if (v.canPlayType('application/vnd.apple.mpegurl')) {
-              v.src = source.url
-              start()
-            } else {
-              failOver('Adaptive streaming is not supported in this browser.')
-            }
-            return
-          }
-          console.info('[Niho HLS] FINAL_STREAM_URL', source.url)
-          const h = new HlsJs({ startPosition: resumeAt.current || -1 })
-          h.subtitleDisplay = false
-          hls.current = h
-          const updateAudioTracks = () => {
-            const tracks = toTrackOptions(h.audioTracks)
-            console.info('[Niho HLS] AUDIO_TRACKS_UPDATED', tracks)
-            setAudioTracks(tracks)
-            const preferred = preferredAudioLanguage.current
-            const selected = preferred
-              ? tracks.find((track) => track.language?.toLowerCase() === preferred.toLowerCase())?.id
-              : tracks.find((track) => track.language?.toLowerCase().startsWith('en'))?.id
-            const nextTrack = selected ?? (tracks.length ? h.audioTrack : -1)
-            if (nextTrack >= 0) h.audioTrack = nextTrack
-            setAudioTrack(nextTrack)
-          }
-          const updateSubtitleTracks = () => {
-            const tracks = toTrackOptions(h.subtitleTracks)
-            console.info('[Niho HLS] SUBTITLE_TRACKS_UPDATED', tracks)
-            setSubtitleTracks(tracks)
-            const preferred = preferredSubtitleLanguage.current
-            const selected = preferred
-              ? tracks.find((track) => track.language?.toLowerCase() === preferred.toLowerCase())?.id
-              : undefined
-            const nextTrack = selected ?? -1
-            h.subtitleTrack = nextTrack
-            setSubtitleTrack(nextTrack)
-          }
-          h.on(HlsJs.Events.AUDIO_TRACKS_UPDATED, updateAudioTracks)
-          h.on(HlsJs.Events.SUBTITLE_TRACKS_UPDATED, updateSubtitleTracks)
-          h.on(HlsJs.Events.MANIFEST_LOADING, (_e, data) => {
-            console.info('[Niho HLS] MANIFEST_LOADING', {
-              url: data.url,
-            })
-          })
-          h.on(HlsJs.Events.MANIFEST_PARSED, (_e, data) => {
-            console.info('[Niho HLS] MANIFEST_PARSED', {
-              url: source.url,
-              levels: data.levels.length,
-              codecs: data.levels.map((level) => level.codecSet),
-            })
-            const levels = data.levels
-              .map((l, i) => ({ label: `${l.height}p`, value: i, height: l.height }))
-              .sort((a, b) => b.height - a.height)
-              .map(({ label, value }) => ({ label, value }))
-            setHlsLevels([{ label: 'Auto', value: -1 }, ...levels])
-            updateAudioTracks()
-            updateSubtitleTracks()
-            markPlaybackStarted()
+      import('hls.js').then(({ default: HlsJs }) => {
+        if (cancelled) return
+        if (!HlsJs.isSupported()) {
+          if (media.canPlayType('application/vnd.apple.mpegurl')) {
+            media.src = source.url
             start()
-          })
-          h.on(HlsJs.Events.LEVEL_LOADED, (_e, data) => {
-            console.info('[Niho HLS] LEVEL_LOADED', {
-              url: data.details.url,
-              fragments: data.details.fragments.length,
-            })
-          })
-          h.on(HlsJs.Events.FRAG_LOADING, (_e, data) => {
-            console.info('[Niho HLS] FRAG_LOADING', {
-              url: data.frag.url,
-              start: data.frag.start,
-              duration: data.frag.duration,
-            })
-          })
-          h.on(HlsJs.Events.FRAG_LOADED, (_e, data) => {
-            console.info('[Niho HLS] FRAG_LOADED', {
-              url: data.frag.url,
-              start: data.frag.start,
-              duration: data.frag.duration,
-            })
-            markPlaybackStarted()
-          })
-          h.on(HlsJs.Events.FRAG_BUFFERED, () => {
-            markPlaybackStarted()
-          })
-          h.on(HlsJs.Events.ERROR, (_e, data) => {
-            console.error('[Niho HLS] ERROR', {
-              type: data.type,
-              details: data.details,
-              isFragLoadError: data.details === 'fragLoadError',
-              isBufferStalledError: data.details === 'bufferStalledError',
-              isMediaError: data.type === HlsJs.ErrorTypes.MEDIA_ERROR,
-              fatal: data.fatal,
-              url: data.url,
-              responseCode: data.response?.code,
-              reason: data.reason,
-            })
-            if (!data.fatal || playbackStarted.current || !v.paused || v.currentTime > 0) return
-            window.clearTimeout(loadTimer)
-            if (data.type === HlsJs.ErrorTypes.NETWORK_ERROR && !retriedNetwork && !cancelled) {
-              retriedNetwork = true
-              h.startLoad()
-              return
-            }
-            if (data.details === 'manifestIncompatibleCodecsError') {
-              failOver('This browser does not support the CinePro stream codecs (H.264/AAC).')
-              return
-            }
-            const detail = data.details ? ` (${data.details})` : ''
-            failOver(`This stream is unavailable right now${detail}.`)
-          })
-          h.loadSource(source.url)
-          h.attachMedia(v)
-          startLoadTimeout()
+          } else failOver('Adaptive streaming is not supported in this browser.')
+          return
+        }
+        const h = new HlsJs({ startPosition: resumeAt.current || -1 })
+        stream = h
+        hls.current = h
+        h.subtitleDisplay = false
+        const updateAudio = () => {
+          const tracks = toTrackOptions(h.audioTracks)
+          setAudioTracks(tracks)
+          const preference = usePlaybackPreferences.getState().audioLanguage
+          const preferred = tracks.find((track) => languageMatches(track.language, preference))?.id
+          const selected = preferred ?? Math.max(0, h.audioTracks.findIndex((track) => track.default))
+          if (selected >= 0) h.audioTrack = selected
+          setAudioTrack(selected)
+        }
+        const updateSubtitles = () => {
+          const tracks = toTrackOptions(h.subtitleTracks)
+          setSubtitleTracks(tracks)
+          const preference = usePlaybackPreferences.getState().subtitleLanguage
+          const selected = tracks.find((track) => languageMatches(track.language, preference))?.id ?? -1
+          h.subtitleTrack = selected
+          setSubtitleTrack(selected)
+        }
+        h.on(HlsJs.Events.AUDIO_TRACKS_UPDATED, updateAudio)
+        h.on(HlsJs.Events.SUBTITLE_TRACKS_UPDATED, updateSubtitles)
+        h.on(HlsJs.Events.MANIFEST_PARSED, (_event, data) => {
+          setHlsLevels([{ label: 'Auto', value: -1 }, ...data.levels
+            .map((level, value) => ({ label: `${level.height}p`, value, height: level.height }))
+            .sort((a, b) => b.height - a.height)])
+          updateAudio()
+          updateSubtitles()
+          start()
         })
-        .catch(() => {
-          if (!cancelled) {
-            startLoadTimeout()
-            failOver('Could not load the streaming player.')
-          }
+        h.on(HlsJs.Events.ERROR, (_event, data) => {
+          if (!data.fatal || cancelled) return
+          if (data.type === HlsJs.ErrorTypes.NETWORK_ERROR && networkRetries < 2) {
+            networkRetries += 1
+            setRecovering(true)
+            setWaiting(true)
+            armTimeout()
+            h.startLoad(playbackStarted.current ? media.currentTime : resumeAt.current || -1)
+          } else if (data.type === HlsJs.ErrorTypes.MEDIA_ERROR && mediaRetries < 1) {
+            mediaRetries += 1
+            setRecovering(true)
+            setWaiting(true)
+            armTimeout()
+            h.recoverMediaError()
+          } else failOver('Playback was interrupted. Try again to resume from your last position.')
         })
+        h.loadSource(source.url)
+        h.attachMedia(media)
+      }).catch(() => {
+        if (!cancelled) failOver('Could not load the streaming player. Please try again.')
+      })
     } else {
-      v.src = source.url
-      startLoadTimeout()
+      media.src = source.url
       start()
     }
 
+    const watchdog = window.setInterval(() => {
+      if (cancelled || document.visibilityState === 'hidden' || media.paused || media.ended) {
+        lastAdvance = Date.now()
+        return
+      }
+      if (media.currentTime !== lastPosition) {
+        lastPosition = media.currentTime
+        lastAdvance = Date.now()
+        markPlaybackStarted()
+        return
+      }
+      if (!playbackStarted.current || Date.now() - lastAdvance < 8000) return
+      lastAdvance = Date.now()
+      if (stream && stallRetries < 2) {
+        stallRetries += 1
+        setRecovering(true)
+        setWaiting(true)
+        stream.startLoad(media.currentTime)
+      } else failOver('Playback has stalled. Try again to continue from here.')
+    }, 1000)
     return () => {
       cancelled = true
-      window.clearTimeout(loadTimer)
+      window.clearInterval(watchdog)
       window.clearTimeout(sourceTimeout.current)
-      sourceTimeout.current = undefined
-      // Report before tearing down: resetting the element clears currentTime/duration.
-      report()
-      hls.current?.destroy()
+      report(media)
+      stream?.destroy()
       hls.current = null
-      setAudioTracks([])
-      setSubtitleTracks([])
-      v.removeAttribute('src')
-      v.load()
+      media.removeAttribute('src')
+      media.load()
     }
-  }, [source, sourceIndex, sources.length, failOver, markPlaybackStarted, report])
-
-  // Report progress periodically while playing.
-  useEffect(() => {
-    if (!playing) return
-    const id = window.setInterval(report, REPORT_EVERY_MS)
-    return () => window.clearInterval(id)
-  }, [playing, report])
+  }, [source, sourceIndex, sources.length, failOver, markPlaybackStarted, report, reload])
 
   const showControls = useCallback(() => {
     setControls(true)
@@ -349,6 +370,7 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
   useEffect(() => () => {
     window.clearTimeout(hideTimer.current)
     window.clearTimeout(feedbackTimer.current)
+    window.clearTimeout(lockTimer.current)
   }, [])
 
   const seekBy = useCallback(
@@ -363,31 +385,41 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
   )
 
   function onSurfaceClick(e: React.MouseEvent<HTMLDivElement>) {
-    if ((e.target as HTMLElement).closest('button, input, a, [role="menu"]')) {
+    if (locked) return
+    if ((e.target as HTMLElement).closest('button, input, select, a, [role="menu"], [role="dialog"]')) {
       lastTap.current = null
       showControls()
       return
     }
-    showControls()
     root.current?.focus({ preventScroll: true })
     const bounds = e.currentTarget.getBoundingClientRect()
     const fraction = (e.clientX - bounds.left) / bounds.width
-    const side = fraction < 0.4 ? 'left' : fraction > 0.6 ? 'right' : null
-    if (!side || error || menuOpen || trackMenu) {
+    const side = fraction < 1 / 3 ? 'left' : fraction > 2 / 3 ? 'right' : 'center'
+    const now = e.timeStamp
+    const canGesture = !error && !menuOpen && !trackMenu && !settingsOpen && !episodesOpen
+    if (canGesture && lastTap.current?.side === side && now - lastTap.current.time < 350) {
       lastTap.current = null
-      return
-    }
-    const now = performance.now()
-    if (lastTap.current?.side === side && now - lastTap.current.time < 350) {
-      lastTap.current = null
+      if (side === 'center') {
+        togglePlay()
+        return
+      }
       const v = video.current
       if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return
       seekBy(side === 'left' ? -10 : 10)
       setSeekFeedback(side)
       window.clearTimeout(feedbackTimer.current)
       feedbackTimer.current = window.setTimeout(() => setSeekFeedback(null), 700)
+      return
+    }
+    lastTap.current = canGesture ? { side, time: now } : null
+    if (controlsVisible) {
+      window.clearTimeout(hideTimer.current)
+      setControls(false)
+      setMenuOpen(false)
+      setTrackMenu(null)
+      setMoreSubtitlesOpen(false)
     } else {
-      lastTap.current = { side, time: now }
+      showControls()
     }
   }
 
@@ -407,6 +439,19 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
     if (v.paused) v.play().catch(() => undefined)
     else v.pause()
     showControls()
+  }
+
+  function onPlayButtonClick(e: React.MouseEvent<HTMLButtonElement>) {
+    e.stopPropagation()
+    lastTap.current = null
+    const now = e.timeStamp
+    // A double tap directly on the button should toggle playback only once.
+    if (e.detail > 0 && lastPlayButtonTap.current !== null && now - lastPlayButtonTap.current < 350) {
+      lastPlayButtonTap.current = null
+      return
+    }
+    lastPlayButtonTap.current = e.detail > 0 ? now : null
+    togglePlay()
   }
 
   function toggleMute() {
@@ -430,25 +475,25 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
   function chooseAudioTrack(track: TrackOption) {
     if (!hls.current) return
     hls.current.audioTrack = track.id
-    preferredAudioLanguage.current = track.language
-    writeTrackPreference(AUDIO_LANGUAGE_KEY, track.language)
+    if (track.language) preferences.update({ audioLanguage: track.language })
     setAudioTrack(track.id)
     setTrackMenu(null)
   }
 
   function chooseSubtitleTrack(track: TrackOption | null) {
-    if (!hls.current) return
     const id = track?.id ?? -1
-    hls.current.subtitleTrack = id
-    preferredSubtitleLanguage.current = track?.language
-    writeTrackPreference(SUBTITLE_LANGUAGE_KEY, track?.language)
+    if (hls.current) hls.current.subtitleTrack = id
+    else Array.from(video.current?.textTracks ?? []).forEach((item, index) => {
+      if (item.kind === 'subtitles' || item.kind === 'captions') item.mode = index === id ? 'hidden' : 'disabled'
+    })
+    if (!track || track.language) preferences.update({ subtitleLanguage: track?.language ?? 'off' })
     setSubtitleTrack(id)
     setTrackMenu(null)
     setMoreSubtitlesOpen(false)
   }
 
   function onKey(e: React.KeyboardEvent) {
-    if ((e.target as HTMLElement).closest('button, input, a')) return
+    if (locked || (e.target as HTMLElement).closest('button, input, select, a, [role="dialog"]')) return
     const handled: Record<string, () => void> = {
       ' ': togglePlay,
       k: togglePlay,
@@ -473,13 +518,54 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
   const activeQuality = hlsLevels.length ? hlsLevel : sourceIndex
   const showUpNext = next && duration > 0 && duration - time < UP_NEXT_SEC
 
+  function revealLockHint() {
+    setLockHint(true)
+    window.clearTimeout(lockTimer.current)
+    lockTimer.current = window.setTimeout(() => { setLockHint(false); setUnlockArmed(false) }, 3500)
+  }
+
+  function lockScreen() {
+    hold.stop()
+    lastTap.current = null
+    setLocked(true)
+    setControls(false)
+    setMenuOpen(false)
+    setTrackMenu(null)
+    revealLockHint()
+  }
+
+  function goNext() {
+    report()
+    hold.stop()
+    setEnded(false)
+    next?.onSelect()
+  }
+
   return (
     <div
       ref={root}
-      className={`player player--stream ${controlsVisible ? 'player--controls' : ''}`}
-      onPointerMove={(e) => { if (e.pointerType === 'mouse') showControls() }}
+      className={`player player--stream ${controlsVisible ? 'player--controls' : ''} ${locked ? 'player--locked' : ''}`}
+      onPointerDown={hold.onPointerDown}
+      onPointerUp={hold.stop}
+      onPointerCancel={hold.stop}
+      onLostPointerCapture={hold.stop}
+      onContextMenu={(event) => { if (!(event.target as HTMLElement).closest('input, select')) event.preventDefault() }}
+      onPointerMove={(e) => {
+        hold.onPointerMove(e)
+        if (!locked && !hold.boosting && e.pointerType === 'mouse') showControls()
+      }}
+      onClickCapture={(event) => {
+        if (hold.consumeClick()) {
+          lastTap.current = null
+          event.preventDefault(); event.stopPropagation()
+        } else if (locked && !(event.target as HTMLElement).closest('.player__unlock')) {
+          event.preventDefault(); event.stopPropagation(); revealLockHint()
+        }
+      }}
       onClick={onSurfaceClick}
-      onFocus={showControls}
+      onFocus={(e) => {
+        if (!locked && e.target.matches(':focus-visible')) showControls()
+      }}
       onKeyDown={onKey}
       tabIndex={-1}
       role="region"
@@ -493,12 +579,13 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
         preload="auto"
         onPlay={() => {
           setPlaying(true)
+          setEnded(false)
+          setAutoplayCancelled(false)
           showControls()
         }}
         onPause={() => {
           setPlaying(false)
           setControls(true)
-          report()
         }}
         onWaiting={() => setWaiting(true)}
         onPlaying={() => {
@@ -506,8 +593,7 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
           setWaiting(false)
         }}
         onCanPlay={() => {
-          markPlaybackStarted()
-          setWaiting(false)
+          if (video.current?.paused) setWaiting(false)
         }}
         onLoadedMetadata={(e) => {
           const v = e.currentTarget
@@ -515,7 +601,6 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
           if (!hls.current && resumeAt.current > 0 && resumeAt.current < v.duration - 5) v.currentTime = resumeAt.current
         }}
         onTimeUpdate={(e) => {
-          markPlaybackStarted()
           const v = e.currentTarget
           setTime(v.currentTime)
           if (v.buffered.length) setBuffered(v.buffered.end(v.buffered.length - 1))
@@ -523,20 +608,34 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
         onDurationChange={(e) => setDuration(e.currentTarget.duration)}
         onEnded={() => {
           report()
-          cb.current.onEnded()
+          hold.stop()
+          setPlaying(false)
+          setWaiting(false)
+          setEnded(true)
+          setCountdown(10)
+          setControls(true)
+          if (!next) cb.current.onEnded()
         }}
         onError={() => {
           if (!hls.current) failOver("This video file can't be played in your browser.")
         }}
       />
 
-      <SubtitleOverlay video={video} controlsVisible={controlsVisible} hidden={Boolean(error)} />
+      <SubtitleOverlay video={video} controlsVisible={controlsVisible} hidden={Boolean(error)} size={preferences.subtitleSize} />
 
-      {waiting && !error && <div className="player__spinner spinner" aria-hidden="true" />}
+      {waiting && !error && !ended && <div className="player__buffering" role="status"><div className="spinner" aria-hidden="true" /><span>{recovering ? 'Reconnecting…' : playing ? 'Buffering…' : 'Getting your video ready…'}</span></div>}
+      {hold.boosting && <div className="player__speed-feedback" role="status"><Icon name="forward" size={20} /> 2× speed <span>Release to return</span></div>}
+      {locked && lockHint && <button className="player__unlock" onClick={(event) => {
+        event.stopPropagation()
+        if (unlockArmed) { setLocked(false); setUnlockArmed(false); showControls() }
+        else { setUnlockArmed(true); revealLockHint() }
+      }}><Icon name="lock" />{unlockArmed ? 'Tap again to unlock' : 'Unlock controls'}</button>}
 
       {error && (
         <div className="player__error" role="alert">
           <p>{error}</p>
+          <button className="btn btn--primary" onClick={retryStream}>Retry playback</button>
+          {episodes && <button className="btn btn--secondary" onClick={() => setEpisodesOpen(true)}>Choose episode</button>}
           {sourcePage && (
             <a className="btn btn--secondary" href={sourcePage} target="_blank" rel="noreferrer">
               Open on source site <Icon name="external" size={18} />
@@ -553,25 +652,30 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
       )}
 
       <div className="player__top" inert={!controlsVisible}>
-        <button className="icon-btn icon-btn--lg" onClick={onBack} aria-label="Back">
+        <button className="icon-btn icon-btn--lg" onClick={() => { report(); hold.stop(); onBack() }} aria-label="Back">
           <Icon name="back" size={28} />
         </button>
         <div className="player__heading">
           <span className="player__title">{title}</span>
           {subtitle && <span className="player__subtitle">{subtitle}</span>}
         </div>
+        <span className="player__spacer" />
+        <button className="icon-btn" onClick={lockScreen} aria-label="Lock controls"><Icon name="lock" /></button>
+        <button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Playback settings"><Icon name="settings" /></button>
       </div>
 
       <div className="player__center" inert={!controlsVisible || Boolean(error)}>
-        <button className="player__big-play" onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'}>
+        <button className="player__big-play" onClick={onPlayButtonClick} aria-label={playing ? 'Pause' : 'Play'}>
           <Icon name={playing ? 'pause' : 'play'} size={40} />
         </button>
       </div>
 
-      {showUpNext && (
-        <button className="btn btn--primary player__up-next" onClick={next.onSelect}>
-          <Icon name="next" size={20} /> {next.label}
-        </button>
+      {next && (showUpNext || ended) && controlsVisible && (
+        <div className="player__up-next">
+          {ended && preferences.autoplay && !autoplayCancelled && <p role="status">Next episode in {countdown} {countdown === 1 ? 'second' : 'seconds'}</p>}
+          <button className="btn btn--primary" onClick={goNext}><Icon name="next" size={20} />{next.label}</button>
+          {ended && preferences.autoplay && !autoplayCancelled && <button className="btn btn--secondary" onClick={() => setAutoplayCancelled(true)}>Cancel autoplay</button>}
+        </div>
       )}
 
       <div className="player__bottom" inert={!controlsVisible}>
@@ -602,10 +706,11 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
           </button>
           <span className="player__spacer" />
           {next && (
-            <button className="icon-btn player__labelled" onClick={next.onSelect} aria-label={next.label}>
+            <button className="icon-btn player__labelled" onClick={goNext} aria-label={next.label}>
               <Icon name="next" /> <span>Next</span>
             </button>
           )}
+          {episodes && <button className="icon-btn player__labelled" onClick={() => setEpisodesOpen(true)} aria-label="Episodes"><Icon name="episodes" /><span>Episodes</span></button>}
           {qualityOptions.length > 1 && (
             <div className="player__menu-wrap">
               <button
@@ -721,6 +826,10 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
           </button>
         </div>
       </div>
+      {settingsOpen && <PlaybackSettings onClose={() => { setSettingsOpen(false); showControls() }} />}
+      {episodesOpen && episodes && <EpisodePicker {...episodes} onClose={() => { setEpisodesOpen(false); showControls() }} onSelect={(selectedSeason, selectedEpisode) => {
+        report(); hold.stop(); setEpisodesOpen(false); episodes.onSelect(selectedSeason, selectedEpisode)
+      }} />}
     </div>
   )
 }

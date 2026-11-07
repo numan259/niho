@@ -18,6 +18,13 @@ export function Spinner({ label = 'Loading' }: { label?: string }) {
   )
 }
 
+export function TitleSkeleton() {
+  return <div className="title-skeleton" role="status" aria-label="Loading title">
+    <div className="title-skeleton__hero" />
+    <div className="title-skeleton__body"><div /><div /><div /><RowSkeleton count={4} /></div>
+  </div>
+}
+
 export function Message({
   title,
   children,

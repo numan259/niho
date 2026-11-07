@@ -52,3 +52,11 @@ The direct-stream player uses a custom subtitle overlay fed by active browser
 text-track cues. It positions captions within the displayed picture and above
 visible playback controls. Android fullscreen uses Capacitor Screen Orientation
 and System Bars; browser fullscreen uses the available web APIs.
+
+Playback preferences persist in the `niho.playback` local store and apply across
+profiles on the same device. Watch progress remains part of each profile's
+library. The progress hook saves on media and page lifecycle events, including
+Capacitor app backgrounding, and captures the media node before React unmounts it.
+The player bounds HLS recovery attempts and detects a stalled playback clock.
+Episode navigation uses TMDB season metadata, with an optional end-of-episode
+countdown and a season/episode picker inside the player.

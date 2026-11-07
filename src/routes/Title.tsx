@@ -11,7 +11,7 @@ import { BackButton } from '../ui/layout'
 import { watchPath } from '../ui/paths'
 import { formatClock, formatRuntime } from '../ui/player/time'
 import { Row } from '../ui/sections/Row'
-import { ErrorMessage, Message, RowSkeleton, Spinner } from '../ui/States'
+import { ErrorMessage, Message, RowSkeleton, Spinner, TitleSkeleton } from '../ui/States'
 
 export default function Title() {
   const params = useParams()
@@ -20,7 +20,7 @@ export default function Title() {
   const { data, error, isPending, refetch } = useTitle(mediaType, id)
 
   if (!mediaType || !id) return <Message title="Title not found" />
-  if (isPending) return <Spinner />
+  if (isPending) return <TitleSkeleton />
   if (error) return <ErrorMessage error={error} onRetry={() => refetch()} />
   if (!data) {
     return <Message title="Title not found" action={<Link className="btn btn--secondary" to="/">Back to Home</Link>} />

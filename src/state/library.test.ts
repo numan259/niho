@@ -34,6 +34,12 @@ describe('applyProgress', () => {
     expect(p).toEqual({})
   })
 
+  it('queues the next season in Continue Watching when supplied', () => {
+    const p = applyProgress({}, { title: series(7), season: 1, episodeIndex: 9, episodeCount: 10,
+      position: 1549, duration: 1550, nextEpisode: { season: 2, episode: 1, episodeCount: 8 } })
+    expect(p['tv/7']).toMatchObject({ season: 2, episodeIndex: 0, episodeCount: 8, position: 0, upNext: true })
+  })
+
   it('stores only the summary fields of a title', () => {
     const detail = { ...title(3), cast: [{ id: 1, name: 'x' }], videos: [] } as TitleSummary
     const p = applyProgress({}, { title: detail, episodeIndex: 0, episodeCount: 1, position: 40, duration: 100 })

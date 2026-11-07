@@ -6,6 +6,7 @@ import { titlePath, watchPath } from '../ui/paths'
 import { VideoPlayer } from '../ui/player/VideoPlayer'
 import { ErrorMessage, Message, Spinner } from '../ui/States'
 import { useGoBack } from '../ui/useGoBack'
+import { nextEpisode } from '../ui/player/episodes'
 
 /**
  * /watch/movie/:id            → Streams movie via standalone embedded player
@@ -29,6 +30,7 @@ export default function Watch() {
   const streams = useCineProSources(mediaType, tmdbId, season, episode)
 
   if (!mediaType || !tmdbId) return <Message title="Title not found" />
+  if (mediaType === 'tv' && !isEpisode) return <Message title="Select an episode to watch" />
   if (title.isPending || streams.isPending) {
     return (
       <div className="player player--loading">
@@ -37,7 +39,6 @@ export default function Watch() {
     )
   }
   if (title.error) return <ErrorMessage error={title.error} onRetry={() => title.refetch()} />
-  if (mediaType === 'tv' && !isEpisode) return <Message title="Select an episode to watch" />
   if (streams.error) return <ErrorMessage error={streams.error} onRetry={() => streams.refetch()} />
   const t = title.data
   if (!t) return <Message title="Title not found" />
@@ -49,7 +50,7 @@ export default function Watch() {
 
   const entry = lib.progress[t.key]
   const startAt = entry && !entry.upNext && entry.season === season && entry.episodeIndex === epIndex ? entry.position : 0
-  const nextEp = isEpisode && episode < epCount ? { season, episode: episode + 1 } : undefined
+  const nextEp = isEpisode ? nextEpisode(t.seasons, season, episode) : undefined
 
   return (
     <VideoPlayer
@@ -70,13 +71,17 @@ export default function Watch() {
           episodeLabel: isEpisode ? subtitle : undefined,
           position,
           duration,
+          nextEpisode: nextEp,
         })
       }
       onEnded={() => {
-        if (nextEp) navigate(watchPath(t, nextEp), { replace: true })
-        else navigate(titlePath(t), { replace: true })
+        navigate(titlePath(t), { replace: true })
       }}
       next={nextEp ? { label: `Next: S${nextEp.season}:E${nextEp.episode}`, onSelect: () => navigate(watchPath(t, nextEp), { replace: true }) } : undefined}
+      episodes={isEpisode ? {
+        tvId: tmdbId, seasons: t.seasons, season, episode,
+        onSelect: (selectedSeason, selectedEpisode) => navigate(watchPath(t, { season: selectedSeason, episode: selectedEpisode }), { replace: true }),
+      } : undefined}
     />
   )
 }

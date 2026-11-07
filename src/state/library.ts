@@ -45,6 +45,7 @@ export interface ProgressUpdate {
   position: number
   duration: number
   now?: number
+  nextEpisode?: { season: number; episode: number; episodeCount: number }
 }
 
 /** Pure reducer for watch progress — the rules behind "Continue Watching". */
@@ -65,12 +66,12 @@ export function applyProgress(progress: ProfileLibrary['progress'], u: ProgressU
       duration: Math.floor(u.duration),
       updatedAt: now,
     }
-  } else if (u.episodeIndex + 1 < u.episodeCount) {
+  } else if (u.nextEpisode || u.episodeIndex + 1 < u.episodeCount) {
     next[title.key] = {
       title,
-      season: u.season,
-      episodeIndex: u.episodeIndex + 1,
-      episodeCount: u.episodeCount,
+      season: u.nextEpisode?.season ?? u.season,
+      episodeIndex: u.nextEpisode ? u.nextEpisode.episode - 1 : u.episodeIndex + 1,
+      episodeCount: u.nextEpisode?.episodeCount ?? u.episodeCount,
       position: 0,
       duration: 0,
       upNext: true,
