@@ -92,3 +92,13 @@ it('applies saved audio and subtitle preferences to an active stream', () => {
   act(() => usePlaybackPreferences.getState().update({ audioLanguage: '' }))
   expect(stream.audioTrack).toBe(0)
 })
+
+it('preserves the subtitle preference when hls.js resets its default after a track-list event', async () => {
+  const stream = state.instances[0]
+  await act(async () => {
+    usePlaybackPreferences.getState().update({ subtitleLanguage: 'en' })
+    stream.emit('subtitles', {})
+    stream.subtitleTrack = -1
+  })
+  expect(stream.subtitleTrack).toBe(0)
+})

@@ -36,6 +36,7 @@ Core URL without requiring the media service to be exposed publicly.
 - Profiles, Kids profile filtering, My List, likes, and Continue Watching
 - Official YouTube trailer playback
 - Optional CinePro HLS playback for movies and TV episodes
+- Movie and episode downloads with offline playback, progress, cancel/retry, and deletion
 - HLS quality, audio-track, subtitle-track, seek, volume, and fullscreen controls
 - Tap to show or hide controls, even while paused; a single central play/pause button
 - Double-tap or double-click the left/right side to skip back/forward 10 seconds
@@ -226,6 +227,33 @@ and rotation themselves. YouTube trailers use YouTube's embedded controls.
 With the player focused, keyboard shortcuts are Space/K (play/pause), Left/J and
 Right/L (seek 10 seconds), M (mute), and F (fullscreen).
 
+### Downloads and offline viewing
+
+Open a movie and tap **Download movie**, or use **Download episode** under an
+episode. Open the **Downloads** tab or **My Niho → Downloads** to follow progress, cancel, retry, delete a
+saved video, or choose **Watch offline**. Downloads are listed per profile and
+stored on this device. Watch progress is saved as usual.
+
+Keep Niho open until the download completes. One video downloads at a time.
+Interrupted downloads can be retried from the beginning; incomplete files are
+removed. The downloader chooses the best available variant up to 720p (or the
+lowest variant if all are larger), the preferred/default audio, and matching
+subtitles from Playback settings. The saved quality and languages appear on the
+download card. Embedded audio and captions remain part of the video.
+
+Completed downloads play without TMDB or CinePro requests, including after closing
+and reopening the Android app. Production web builds also cache every app route
+and the player runtime for offline startup; visit the app online first and allow
+its service worker to finish installing. The Vite development server does not
+provide an offline app shell.
+
+Downloads require a completed HLS VOD playlist and a browser with Media Source
+support (including the Android app). Live/incomplete playlists, DRM, certain
+advanced HLS extensions, and individual resources over 128 MB are rejected with
+an explanation. Storage availability depends on the device/browser quota. Clearing
+app/site data removes downloads; browsers may also remove non-persistent storage.
+YouTube trailers are not downloaded.
+
 ### Android installation
 
 For Android:
@@ -280,6 +308,7 @@ npm run lint
 npm run typecheck
 npm test
 npm run test:e2e
+npm run test:offline
 npx playwright test e2e/player.spec.ts
 npm run preview
 npm run android:apk
@@ -295,6 +324,11 @@ and landscape using local media fixtures. Unit tests also cover progress saving,
 autoplay, next-season selection, and bounded stream recovery. Tests do not require
 a CinePro server. Real stream delivery and physical-device rotation should also
 be checked on your own setup.
+
+`npm run test:offline` builds and serves the production app on port 5175 and
+tests downloads using a small generated video fixture. It verifies a cold reload
+with networking disabled, playback, subtitles, seeking, deletion, retry,
+cancellation, interrupted downloads, and storage quota failures.
 
 ## Troubleshooting
 

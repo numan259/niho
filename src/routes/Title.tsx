@@ -7,6 +7,7 @@ import { useLibrary } from '../state/library'
 import { Artwork } from '../ui/Artwork'
 import { TitleCard } from '../ui/cards'
 import { Icon } from '../ui/Icon'
+import { DownloadButton } from '../ui/DownloadButton'
 import { BackButton } from '../ui/layout'
 import { watchPath } from '../ui/paths'
 import { formatClock, formatRuntime } from '../ui/player/time'
@@ -128,6 +129,7 @@ function TitleView({ title: t }: { title: TitleDetail }) {
             )}
           </p>
         )}
+        {isMovie && <DownloadButton title={t} />}
         {t.makers.length > 0 && (
           <p className="title-page__credits">
             <span>{isSeries ? 'Created by' : 'Directed by'}</span> {t.makers.join(', ')}
@@ -282,6 +284,7 @@ function Episodes({ title: t }: { title: TitleDetail }) {
                   </span>
                   <Icon name="play" size={20} />
                 </Link>
+                <DownloadButton title={t} season={ep.season} episode={ep.number} label={ep.name} episodeCount={data.length} />
               </li>
             )
           })}

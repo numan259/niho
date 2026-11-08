@@ -5,14 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/offline-shell.mjs",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b",
     "test:e2e": "playwright test",
-    "android:apk": "vite build && cap sync android && node scripts/android-apk.mjs"
+    "test:offline": "playwright test --config playwright.offline.config.ts",
+    "android:apk": "npm run build && cap sync android && node scripts/android-apk.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.2",

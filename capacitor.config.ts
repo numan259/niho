@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli'
 
 // Native Android shell: the built web app (dist/) is bundled inside the APK,
-// so only the films themselves stream from the internet.
+// while completed video downloads are stored separately on the device.
 const config: CapacitorConfig = {
   appId: 'com.numan259.niho',
   appName: 'Niho',

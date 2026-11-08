@@ -6,6 +6,7 @@ const PORT = 5174
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: 'downloads.spec.ts',
   timeout: 60_000,
   expect: { timeout: 15_000 },
   retries: process.env.CI ? 1 : 0,

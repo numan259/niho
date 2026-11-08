@@ -57,7 +57,10 @@ export default function My() {
         )}
       </section>
 
-      <nav className="my__links">
+      <nav className="my__links" aria-label="Profile menu">
+        <Link to="/downloads" className="my__link">
+          <Icon name="download" /> Downloads
+        </Link>
         <Link to="/profiles" state={{ from: '/my' }} className="my__link">
           <Icon name="edit" /> Manage profiles
         </Link>

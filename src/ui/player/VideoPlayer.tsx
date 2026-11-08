@@ -12,6 +12,8 @@ import { useWatchProgress } from './useWatchProgress'
 import { useHoldSpeed } from './useHoldSpeed'
 import { PlaybackSettings } from './PlaybackSettings'
 import { EpisodePicker, type EpisodePickerProps } from './EpisodePicker'
+import { OFFLINE_BASE } from '../../offline/storage'
+import { OfflineLoader } from '../../offline/loader'
 
 export interface VideoPlayerProps {
   sources: Source[]
@@ -265,13 +267,17 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
       import('hls.js').then(({ default: HlsJs }) => {
         if (cancelled) return
         if (!HlsJs.isSupported()) {
+          if (source.url.startsWith(OFFLINE_BASE)) {
+            failOver('Offline playback is not supported in this browser. Use the Android app or a browser with Media Source support.')
+            return
+          }
           if (media.canPlayType('application/vnd.apple.mpegurl')) {
             media.src = source.url
             start()
           } else failOver('Adaptive streaming is not supported in this browser.')
           return
         }
-        const h = new HlsJs({ startPosition: resumeAt.current || -1 })
+        const h = new HlsJs({ startPosition: resumeAt.current || -1, ...(source.url.startsWith(OFFLINE_BASE) ? { loader: OfflineLoader } : {}) })
         stream = h
         hls.current = h
         h.subtitleDisplay = false
@@ -292,8 +298,10 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
           h.subtitleTrack = selected
           setSubtitleTrack(selected)
         }
-        h.on(HlsJs.Events.AUDIO_TRACKS_UPDATED, updateAudio)
-        h.on(HlsJs.Events.SUBTITLE_TRACKS_UPDATED, updateSubtitles)
+        // hls.js selects its default after these events return. Apply preferences
+        // after that selection so it cannot silently disable a saved language.
+        h.on(HlsJs.Events.AUDIO_TRACKS_UPDATED, () => queueMicrotask(() => { if (!cancelled) updateAudio() }))
+        h.on(HlsJs.Events.SUBTITLE_TRACKS_UPDATED, () => queueMicrotask(() => { if (!cancelled) updateSubtitles() }))
         h.on(HlsJs.Events.MANIFEST_PARSED, (_event, data) => {
           setHlsLevels([{ label: 'Auto', value: -1 }, ...data.levels
             .map((level, value) => ({ label: `${level.height}p`, value, height: level.height }))
@@ -304,6 +312,10 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
         })
         h.on(HlsJs.Events.ERROR, (_event, data) => {
           if (!data.fatal || cancelled) return
+          if (source.url.startsWith(OFFLINE_BASE)) {
+            failOver('This download could not be played. Delete it from Downloads and download it again.')
+            return
+          }
           if (data.type === HlsJs.ErrorTypes.NETWORK_ERROR && networkRetries < 2) {
             networkRetries += 1
             setRecovering(true)

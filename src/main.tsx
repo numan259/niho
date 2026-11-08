@@ -6,6 +6,7 @@ import '@fontsource-variable/bricolage-grotesque/opsz.css'
 import App from './App.tsx'
 import './index.css'
 import { isNative, setupNative } from './native'
+import { initializeDownloads } from './offline/downloads'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,6 +24,7 @@ const queryClient = new QueryClient({
 navigator.storage?.persist?.().catch(() => undefined)
 
 setupNative()
+void initializeDownloads()
 
 // Offline app shell + installability for the web build. Skipped in dev (stale modules)
 // and in the Android app, where the whole app is already bundled on the device.

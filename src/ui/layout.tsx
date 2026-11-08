@@ -26,6 +26,7 @@ const TABS: { to: string; label: string; icon: IconName }[] = [
   { to: '/', label: 'Home', icon: 'home' },
   { to: '/clips', label: 'Clips', icon: 'clips' },
   { to: '/search', label: 'Search', icon: 'search' },
+  { to: '/downloads', label: 'Downloads', icon: 'download' },
 ]
 
 export function AppLayout() {

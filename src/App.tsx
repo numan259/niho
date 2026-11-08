@@ -13,6 +13,8 @@ const Browse = lazy(() => import('./routes/Browse'))
 const Clips = lazy(() => import('./routes/Clips'))
 const My = lazy(() => import('./routes/My'))
 const About = lazy(() => import('./routes/About'))
+const Downloads = lazy(() => import('./routes/Downloads'))
+const OfflineWatch = lazy(() => import('./routes/OfflineWatch'))
 
 export default function App() {
   return (
@@ -22,6 +24,7 @@ export default function App() {
         <Routes>
           <Route path="/profiles" element={<Profiles />} />
           <Route element={<RequireProfile />}>
+            <Route path="/downloads/watch/:downloadId" element={<OfflineWatch />} />
             <Route path="/watch/:mediaType/:id" element={<Watch />} />
             <Route element={<AppLayout />}>
               <Route index element={<Home />} />
@@ -30,6 +33,7 @@ export default function App() {
               <Route path="/search" element={<Search />} />
               <Route path="/clips" element={<Clips />} />
               <Route path="/my" element={<My />} />
+              <Route path="/downloads" element={<Downloads />} />
               <Route path="/about" element={<About />} />
               <Route
                 path="*"

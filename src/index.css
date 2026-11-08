@@ -280,7 +280,7 @@ a.badge:hover {
   bottom: calc(12px + var(--safe-bottom));
   translate: -50% 0;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   width: min(460px, calc(100% - 24px));
   height: var(--tabbar-h);
   padding: 6px;
@@ -2106,6 +2106,24 @@ a.card:hover {
 
 
 /* Playback polish and accessible settings sheets. */
+.downloads__body { padding: 20px var(--gutter) 40px; max-width: 900px; margin: auto; }
+.downloads__body h1 { font-size: 1.8rem; margin: 12px 0; }
+.downloads__note { color: #aaa; font-size: .85rem; line-height: 1.6; }
+.downloads__storage { color: #ddd; font-size: .85rem; margin: 24px 0; }
+.downloads__empty { padding: 48px 16px; text-align: center; background: #18181c; border-radius: 16px; }
+.downloads__empty > svg { color: #aaa; }
+.downloads__list { display: grid; gap: 20px; }
+.download-card { display: flex; gap: 16px; padding: 16px; background: #1b1b20; border: 1px solid #303037; border-radius: 12px; }
+.download-card > .artwork { width: 90px; height: 128px; flex-shrink: 0; border-radius: 8px; }
+.download-card__body { flex: 1; min-width: 0; }
+.download-card h2 { margin: 0 0 8px; font-size: 1.1rem; }
+.download-card p { margin: 8px 0; font-size: .85rem; line-height: 1.5; }
+.download-card progress { width: 100%; accent-color: #e50914; }
+.download-card .btn { font-size: .8rem; min-height: 40px; padding: 8px 12px; }
+.download-button { margin: 8px 0 16px; font-size: .85rem; }
+.download-button:disabled { opacity: .5; cursor: default; }
+.tabbar__item { min-width: 0; }
+@media (max-width: 360px) { .tabbar__item { font-size: .6rem; } .download-card { gap: 10px; padding: 12px; } .download-card > .artwork { width: 64px; height: 100px; } }
 .player--stream .player__video { touch-action: none; }
 .player--stream .player__top > .icon-btn { flex-shrink: 0; }
 .player--stream .player__heading { flex: 0 1 auto; }

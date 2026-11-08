@@ -60,3 +60,23 @@ Capacitor app backgrounding, and captures the media node before React unmounts i
 The player bounds HLS recovery attempts and detects a stalled playback clock.
 Episode navigation uses TMDB season metadata, with an optional end-of-episode
 countdown and a season/episode picker inside the player.
+
+## Offline downloads
+
+`src/offline` stores download metadata and individual HLS resources as IndexedDB
+Blobs, separate from the app-shell service-worker cache. It reduces a master
+playlist to one video rendition and matching audio/subtitles, rewrites all
+resource references to local identifiers, then marks a download ready only after
+every required file has been saved. The custom hls.js loader serves these local
+resources, including byte ranges, and never falls back to a network URL.
+
+The Downloads route and offline player use saved metadata without TMDB queries.
+One foreground download runs at a time; failure/cancellation removes partial
+files. A new app session identifies interrupted jobs and clears their data before
+offering retry. Download deletion removes files and metadata in one transaction.
+Profile IDs scope access to downloads; the storage total includes all profiles.
+
+`scripts/offline-shell.mjs` generates a versioned service worker after each web
+build, precaching all hashed assets including lazy routes and the HLS runtime.
+The Android shell already bundles these assets. Downloads do not use the service
+worker and survive app-shell cache upgrades.

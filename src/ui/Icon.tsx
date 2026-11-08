@@ -1,4 +1,5 @@
 const PATHS = {
+  download: 'M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5',
   play: 'M7 4.5v15a1 1 0 0 0 1.52.85l12-7.5a1 1 0 0 0 0-1.7l-12-7.5A1 1 0 0 0 7 4.5Z',
   pause: 'M7 4h3.5v16H7zM13.5 4H17v16h-3.5z',
   plus: 'M12 4v16M4 12h16',
