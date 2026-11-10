@@ -34,6 +34,7 @@ export default function App() {
               <Route path="/clips" element={<Clips />} />
               <Route path="/my" element={<My />} />
               <Route path="/downloads" element={<Downloads />} />
+              <Route path="/downloads/series/:seriesId" element={<Downloads />} />
               <Route path="/about" element={<About />} />
               <Route
                 path="*"

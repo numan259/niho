@@ -10,9 +10,9 @@ export function DownloadButton({ title, season, episode, label, episodeCount }: 
   if (!profile) return null
   const id = downloadId(profile.id, title.key, season, episode)
   const item = items.find((entry) => entry.id === id)
-  if (item) return <Link className="btn btn--secondary download-button" to="/downloads"><Icon name="download" size={18} />{item.status === 'ready' ? 'Downloaded' : item.status === 'downloading' ? 'Downloading…' : 'Retry download'}</Link>
-  return <button className="btn btn--secondary download-button" disabled={!loaded || Boolean(error) || items.some((entry) => entry.status === 'downloading')}
+  if (item) return <Link className="btn btn--secondary download-button" to={title.mediaType === 'tv' ? `/downloads/series/${title.id}` : '/downloads'}><Icon name="download" size={18} />{item.status === 'ready' ? 'Downloaded' : item.status === 'queued' ? 'Queued' : item.status === 'downloading' ? 'Downloading…' : 'Retry download'}</Link>
+  return <button className="btn btn--secondary download-button" disabled={!loaded || Boolean(error)}
     onClick={() => { void startDownload({ id, profileId: profile.id, title, season, episode, label, episodeCount }) }}>
-    <Icon name="download" size={18} />{items.some((entry) => entry.status === 'downloading') ? 'Download in progress' : episode ? `Download episode ${episode}` : 'Download movie'}
+    <Icon name="download" size={18} />{episode ? `Download episode ${episode}` : 'Download movie'}
   </button>
 }

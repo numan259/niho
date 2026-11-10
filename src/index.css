@@ -2110,13 +2110,23 @@ a.card:hover {
 .downloads__body h1 { font-size: 1.8rem; margin: 12px 0; }
 .downloads__note { color: #aaa; font-size: .85rem; line-height: 1.6; }
 .downloads__storage { color: #ddd; font-size: .85rem; margin: 24px 0; }
+.downloads__background { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+.downloads__background .btn { font-size: .8rem; padding: 10px 14px; }
+.downloads__background p { flex-basis: 100%; margin: 0; }
 .downloads__empty { padding: 48px 16px; text-align: center; background: #18181c; border-radius: 16px; }
 .downloads__empty > svg { color: #aaa; }
 .downloads__list { display: grid; gap: 20px; }
 .download-card { display: flex; gap: 16px; padding: 16px; background: #1b1b20; border: 1px solid #303037; border-radius: 12px; }
 .download-card > .artwork { width: 90px; height: 128px; flex-shrink: 0; border-radius: 8px; }
 .download-card__body { flex: 1; min-width: 0; }
-.download-card h2 { margin: 0 0 8px; font-size: 1.1rem; }
+.download-card h2, .download-card h3 { margin: 0 0 8px; font-size: 1.1rem; }
+.downloads__back { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: #ddd; }
+.downloads__season > h2 { margin: 0 0 14px; font-size: 1.15rem; }
+.download-card--show { color: inherit; text-decoration: none; align-items: center; }
+.download-card--show:hover { background: #26262e; border-color: #555; }
+.download-card--show > svg { flex-shrink: 0; }
+.download-card__title { color: inherit; text-decoration: none; display: block; padding: 6px 0; }
+.download-card__title:hover { text-decoration: underline; }
 .download-card p { margin: 8px 0; font-size: .85rem; line-height: 1.5; }
 .download-card progress { width: 100%; accent-color: #e50914; }
 .download-card .btn { font-size: .8rem; min-height: 40px; padding: 8px 12px; }

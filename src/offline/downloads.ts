@@ -3,10 +3,22 @@ import { getCineProSources } from '../providers/cinepro'
 import { usePlaybackPreferences } from '../state/playback'
 import { attributes, selectMaster, validateMedia } from './playlist'
 import { clearFiles, deleteDownload, listDownloads, offlineUrl, saveDownload, saveFile, type Download } from './storage'
+import { NativeDownloads, nativeDownloads } from './nativeDownloads'
 
 export const useDownloads = create<{ items: Download[]; loaded: boolean; error?: string }>(() => ({ items: [], loaded: false }))
 let initialized: Promise<void> | undefined
 const tasks = new Map<string, AbortController>()
+let draining = false
+let mutations = Promise.resolve()
+let refreshing = false
+async function refreshNative() {
+  if (refreshing) return
+  refreshing = true
+  try {
+    const { items } = await NativeDownloads.list()
+    useDownloads.setState((state) => ({ items: [...state.items.filter((item) => item.backend !== 'native' && !items.some((next) => next.id === item.id)), ...items].sort((a, b) => b.createdAt - a.createdAt) }))
+  } finally { refreshing = false }
+}
 export const downloadId = (profile: string, key: string, season?: number, episode?: number) => `${encodeURIComponent(profile)}-${key.replace('/', '-')}-${season ?? 0}-${episode ?? 0}`
 function update(item: Download) {
   useDownloads.setState(({ items }) => ({ items: [item, ...items.filter((entry) => entry.id !== item.id)].sort((a, b) => b.createdAt - a.createdAt) }))
@@ -24,6 +36,14 @@ export function initializeDownloads() {
         }
       }
       useDownloads.setState({ items: items.sort((a, b) => b.createdAt - a.createdAt), loaded: true })
+      if (nativeDownloads) {
+        await refreshNative()
+        await NativeDownloads.resume().catch(() => undefined)
+        window.setInterval(() => { if (!document.hidden) void refreshNative().catch(() => undefined) }, 1000)
+        document.addEventListener('visibilitychange', () => {
+          if (!document.hidden) { void NativeDownloads.resume().catch(() => undefined); void refreshNative().catch(() => undefined) }
+        })
+      } else queueMicrotask(() => { void drainQueue() })
     } catch {
       useDownloads.setState({ loaded: true, error: 'Downloads need local storage. Storage is unavailable on this device.' })
     }
@@ -68,11 +88,44 @@ async function fetchBlob(url: string, signal: AbortSignal) {
 
 export async function startDownload(input: Pick<Download, 'id' | 'profileId' | 'title' | 'season' | 'episode' | 'episodeCount' | 'label'>) {
   await initializeDownloads()
-  if (tasks.size || useDownloads.getState().error || useDownloads.getState().items.some((item) => item.id === input.id && item.status === 'ready')) return
+  const enqueue = async () => {
+    if (useDownloads.getState().error || useDownloads.getState().items.some((item) => item.id === input.id && item.status !== 'error')) return
+    const item: Download = { ...input, status: 'queued', bytes: 0, completed: 0, total: 0, createdAt: Date.now(), queuedAt: Date.now() }
+    if (nativeDownloads) {
+      const [source] = await getCineProSources(item.title.mediaType, item.title.id, item.season, item.episode)
+      const prefs = usePlaybackPreferences.getState()
+      await NativeDownloads.enqueue({ item: { ...item, backend: 'native' }, url: source.url, audio: prefs.audioLanguage, subtitles: prefs.subtitleLanguage })
+      await deleteDownload(item.id)
+      await refreshNative()
+    } else {
+      await saveDownload(item)
+      update(item)
+      void drainQueue()
+    }
+  }
+  const result = mutations.then(enqueue)
+  mutations = result.catch(() => undefined)
+  await result.catch((error) => update({ ...input, status: 'error', bytes: 0, completed: 0, total: 0, createdAt: Date.now(), error: error instanceof Error ? error.message : 'Could not add download to the queue.' }))
+}
+
+async function drainQueue() {
+  if (draining) return
+  draining = true
+  try {
+    while (true) {
+      const next = useDownloads.getState().items.filter((item) => item.status === 'queued' && item.backend !== 'native')
+        .sort((a, b) => (a.queuedAt ?? a.createdAt) - (b.queuedAt ?? b.createdAt))[0]
+      if (!next) break
+      await downloadWeb(next)
+    }
+  } finally { draining = false }
+}
+
+async function downloadWeb(input: Download) {
   const controller = new AbortController()
   tasks.set(input.id, controller)
   const signal = controller.signal
-  let item: Download = { ...input, status: 'downloading', bytes: 0, completed: 0, total: 0, createdAt: Date.now() }
+  let item: Download = { ...input, status: 'downloading', bytes: 0, completed: 0, total: 0, error: undefined }
   update(item)
   try {
     const { default: Hls } = await import('hls.js')
@@ -127,14 +180,26 @@ export async function startDownload(input: Pick<Download, 'id' | 'profileId' | '
     await playlist(source.url, 'master.m3u8', 0)
     if (!resources.size) throw new Error('The video has no downloadable segments.')
     item = { ...item, total: resources.size }; update(item)
-    for (const [url, file] of resources) {
-      signal.throwIfAborted()
-      const { blob } = await fetchBlob(url, signal)
-      signal.throwIfAborted()
-      await saveFile(`${item.id}/${file}`, blob)
-      item = { ...item, bytes: item.bytes + blob.size, completed: item.completed + 1 }
-      update(item)
-    }
+    const pending = Array.from(resources)
+    let cursor = 0
+    let failure: unknown
+    // Bounded parallel segment requests reduce per-request latency without
+    // buffering the entire movie. Join every worker before clearing partial files.
+    await Promise.all(Array.from({ length: Math.min(3, pending.length) }, async () => {
+      try {
+        while (cursor < pending.length && !failure) {
+          signal.throwIfAborted()
+          const [url, file] = pending[cursor++]
+          const { blob } = await fetchBlob(url, signal)
+          signal.throwIfAborted()
+          if (failure) return
+          await saveFile(`${item.id}/${file}`, blob)
+          item = { ...item, bytes: item.bytes + blob.size, completed: item.completed + 1 }
+          update(item)
+        }
+      } catch (error) { failure ??= error }
+    }))
+    if (failure) throw failure
     for (const [file, text] of playlists) {
       signal.throwIfAborted()
       const blob = new Blob([text], { type: 'application/vnd.apple.mpegurl' })
@@ -156,9 +221,23 @@ export async function startDownload(input: Pick<Download, 'id' | 'profileId' | '
   } finally { tasks.delete(input.id) }
 }
 
-export function cancelDownload(id: string) { tasks.get(id)?.abort() }
+export async function cancelDownload(id: string) {
+  if (nativeDownloads && useDownloads.getState().items.find((item) => item.id === id)?.backend === 'native') {
+    await NativeDownloads.cancel({ id }); await refreshNative(); return
+  }
+  if (tasks.has(id)) { tasks.get(id)?.abort(); return }
+  const item = useDownloads.getState().items.find((entry) => entry.id === id)
+  if (item?.status === 'queued') {
+    const cancelled: Download = { ...item, status: 'error', error: 'Download cancelled. Tap Retry to add it again.' }
+    update(cancelled)
+    await saveDownload(cancelled)
+  }
+}
 export async function removeDownload(id: string) {
   if (tasks.has(id)) { cancelDownload(id); return }
+  if (nativeDownloads && useDownloads.getState().items.find((item) => item.id === id)?.backend === 'native') {
+    await NativeDownloads.remove({ id }); await refreshNative(); return
+  }
   await deleteDownload(id)
   useDownloads.setState(({ items }) => ({ items: items.filter((item) => item.id !== id) }))
 }

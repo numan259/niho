@@ -1,4 +1,5 @@
 import type { TitleSummary } from '../providers'
+import { nativeDownloads, readNativeFile } from './nativeDownloads'
 
 export interface Download {
   id: string
@@ -8,7 +9,9 @@ export interface Download {
   episode?: number
   episodeCount?: number
   label?: string
-  status: 'downloading' | 'ready' | 'error'
+  status: 'queued' | 'downloading' | 'ready' | 'error'
+  backend?: 'native'
+  queuedAt?: number
   bytes: number
   completed: number
   total: number
@@ -46,7 +49,10 @@ async function run<T>(store: string, mode: IDBTransactionMode, operation: (store
 export const listDownloads = () => run<Download[]>('downloads', 'readonly', (store) => store.getAll())
 export const saveDownload = (item: Download) => run('downloads', 'readwrite', (store) => store.put(item))
 export const saveFile = (key: string, blob: Blob) => run('files', 'readwrite', (store) => store.put(blob, key))
-export const readFile = (key: string): Promise<Blob | undefined> => run('files', 'readonly', (store) => store.get(key))
+export async function readFile(key: string): Promise<Blob | undefined> {
+  const saved = await run<Blob | undefined>('files', 'readonly', (store) => store.get(key))
+  return saved ?? (nativeDownloads ? readNativeFile(key) : undefined)
+}
 export const clearFiles = (id: string) => run('files', 'readwrite', (store) => store.delete(IDBKeyRange.bound(`${id}/`, `${id}/\uffff`)))
 export async function deleteDownload(id: string) {
   const connection = await db()

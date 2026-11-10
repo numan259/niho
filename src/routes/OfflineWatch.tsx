@@ -23,12 +23,13 @@ export function OfflineVideo({ item }: { item: Download }) {
   const items = useDownloads((state) => state.items)
   const entry = library.progress[item.title.key]
   const episodeIndex = item.episode ? item.episode - 1 : 0
+  const downloadsPath = item.title.mediaType === 'tv' ? `/downloads/series/${item.title.id}` : '/downloads'
   const startAt = entry && !entry.upNext && entry.season === item.season && entry.episodeIndex === episodeIndex ? entry.position : 0
   const sources = useMemo(() => [{ url: offlineUrl(item.id), type: 'hls' as const, quality: item.quality }], [item.id, item.quality])
   const next = item.episode === undefined ? undefined : items.find((other) => other.profileId === item.profileId && other.title.key === item.title.key && other.status === 'ready' &&
     (other.season === item.season && other.episode === item.episode! + 1 || item.episode === item.episodeCount && other.season === item.season! + 1 && other.episode === 1))
   return <VideoPlayer sources={sources} title={item.title.name} subtitle={`${item.episode ? `S${item.season}:E${item.episode} · ` : ''}Offline`}
-    startAt={startAt} onBack={() => navigate('/downloads')} onEnded={() => navigate('/downloads', { replace: true })}
+    startAt={startAt} onBack={() => navigate(downloadsPath)} onEnded={() => navigate(downloadsPath, { replace: true })}
     next={next ? { label: `Next: S${next.season}:E${next.episode}`, onSelect: () => navigate(`/downloads/watch/${next.id}`, { replace: true }) } : undefined}
     onProgress={(position, duration) => library.saveProgress({ title: item.title, season: item.season, episodeIndex, episodeCount: item.episodeCount ?? 1, episodeLabel: item.label, position, duration })} />
 }

@@ -63,20 +63,35 @@ countdown and a season/episode picker inside the player.
 
 ## Offline downloads
 
-`src/offline` stores download metadata and individual HLS resources as IndexedDB
-Blobs, separate from the app-shell service-worker cache. It reduces a master
+For web downloads, `src/offline` stores metadata and individual HLS resources as
+IndexedDB Blobs, separate from the app-shell service-worker cache. It reduces a master
 playlist to one video rendition and matching audio/subtitles, rewrites all
 resource references to local identifiers, then marks a download ready only after
 every required file has been saved. The custom hls.js loader serves these local
 resources, including byte ranges, and never falls back to a network URL.
 
 The Downloads route and offline player use saved metadata without TMDB queries.
-One foreground download runs at a time; failure/cancellation removes partial
-files. A new app session identifies interrupted jobs and clears their data before
-offering retry. Download deletion removes files and metadata in one transaction.
+The durable FIFO queue processes one title at a time, with three concurrent
+resource transfers. Web failure/cancellation removes partial files. A new web
+session marks interrupted active jobs for retry and continues queued jobs.
+Web deletion removes files and metadata in one IndexedDB transaction.
 Profile IDs scope access to downloads; the storage total includes all profiles.
 
 `scripts/offline-shell.mjs` generates a versioned service worker after each web
 build, precaching all hashed assets including lazy routes and the HLS runtime.
 The Android shell already bundles these assets. Downloads do not use the service
 worker and survive app-shell cache upgrades.
+
+Android uses the local `NihoDownloads` Capacitor plugin and a native `dataSync`
+foreground service. The native service resolves playlists, transfers resources,
+and advances the queue independently of WebView JavaScript. Its queue index uses
+AtomicFile; individual segments are streamed into private app files and renamed
+only when complete. Completed segments can be reused after service restarts.
+The app polls native metadata while visible and merges it with older IndexedDB
+downloads, preserving videos saved by earlier versions. The offline HLS loader
+reads native files through Capacitor's local file server, never a remote URL.
+
+The Android manifest declares notification, foreground-service/data-sync, and
+wake-lock permissions. Notification permission is requested at first enqueue;
+battery settings remain under the user's control. Service timeouts stop cleanly
+and leave resumable queued work. Native media is excluded from OS backup/transfer.

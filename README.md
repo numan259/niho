@@ -234,9 +234,29 @@ episode. Open the **Downloads** tab or **My Niho → Downloads** to follow progr
 saved video, or choose **Watch offline**. Downloads are listed per profile and
 stored on this device. Watch progress is saved as usual.
 
-Keep Niho open until the download completes. One video downloads at a time.
-Interrupted downloads can be retried from the beginning; incomplete files are
-removed. The downloader chooses the best available variant up to 720p (or the
+Downloaded TV episodes are grouped by show. Tap a show to see its saved episodes
+organized by season, then tap an episode to play it offline. Movies remain directly
+playable from the main Downloads screen. Each show displays its downloaded episode
+count and total size; unfinished downloads can be managed inside the same list.
+
+Add multiple movies or episodes to the queue. Niho downloads them in order and
+starts the next automatically, fetching up to three video resources concurrently
+for the active title. Queue positions are shown in Downloads; queued items can
+be cancelled or removed, and failed items can be added again with Retry.
+
+On Android, a native foreground service continues the queue when the app is
+backgrounded or the screen is off. The first download requests notification
+permission on Android 13+ so progress and cancellation are available from the
+notification. Denying notifications does not prevent the foreground service.
+Downloads also provides notification and battery-settings buttons. If the phone
+restricts Niho, allow unrestricted background battery usage there. Android may
+still stop transfers after a force-stop, reboot, or its background-service time
+limit; reopening Niho resumes queued work and already-saved native segments.
+
+In a web browser, keep the app open while downloading. The queue survives reloads;
+an interrupted active web download is marked for Retry while waiting entries
+continue automatically. Retries start that video again. The downloader chooses
+the best available variant up to 720p (or the
 lowest variant if all are larger), the preferred/default audio, and matching
 subtitles from Playback settings. The saved quality and languages appear on the
 download card. Embedded audio and captions remain part of the video.
@@ -328,7 +348,9 @@ be checked on your own setup.
 `npm run test:offline` builds and serves the production app on port 5175 and
 tests downloads using a small generated video fixture. It verifies a cold reload
 with networking disabled, playback, subtitles, seeking, deletion, retry,
-cancellation, interrupted downloads, and storage quota failures.
+cancellation, interrupted downloads, storage quota failures, queue progression,
+and bounded parallel transfers. Android's `DownloadServiceTest` instrumentation
+test checks native queue progression with the activity backgrounded and screen off.
 
 ## Troubleshooting
 
