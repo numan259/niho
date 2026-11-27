@@ -1,5 +1,6 @@
 import type Hls from 'hls.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { languageName, rankSources } from '../../providers/languages'
 import type { Source } from '../../providers'
 import { Icon } from '../Icon'
 import { formatClock } from './time'
@@ -7,10 +8,12 @@ import { isHlsSource, usesNativePlayer } from './routing'
 import { YouTubeStage } from './YouTubeStage'
 import { usePlayerFullscreen } from './usePlayerFullscreen'
 import { SubtitleOverlay } from './SubtitleOverlay'
+import { externalTextTracks, useExternalSubtitles } from './useExternalSubtitles'
 import { languageMatches, usePlaybackPreferences } from '../../state/playback'
 import { useWatchProgress } from './useWatchProgress'
 import { useHoldSpeed } from './useHoldSpeed'
-import { PlaybackSettings } from './PlaybackSettings'
+import { PlayerPanel } from './PlayerPanel'
+import { LanguageChoices, ServerChoices } from './PlayerChoices'
 import { EpisodePicker, type EpisodePickerProps } from './EpisodePicker'
 import { OFFLINE_BASE } from '../../offline/storage'
 import { OfflineLoader } from '../../offline/loader'
@@ -80,7 +83,11 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
   const [autoplayCancelled, setAutoplayCancelled] = useState(false)
   const hasNext = Boolean(next)
 
-  const [sourceIndex, setSourceIndex] = useState(0)
+  const failedSources = useRef(new Set<string>())
+  const [selectedSourceUrl, setSelectedSourceUrl] = useState(() => rankSources(sources, preferences)[0]?.url)
+  const sourceIndex = sources.findIndex(item => item.url === selectedSourceUrl)
+  const setSourceIndex = (index: number) => setSelectedSourceUrl(sources[index]?.url)
+  // Keep the active source stable; preference changes affect menus and subsequent fallback.
   const [playing, setPlaying] = useState(false)
   const [waiting, setWaiting] = useState(true)
   const [time, setTime] = useState(0)
@@ -99,7 +106,6 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
   const [subtitleTracks, setSubtitleTracks] = useState<TrackOption[]>([])
   const [subtitleTrack, setSubtitleTrack] = useState(-1)
   const [trackMenu, setTrackMenu] = useState<'audio' | 'subtitles' | null>(null)
-  const [moreSubtitlesOpen, setMoreSubtitlesOpen] = useState(false)
   const controlsVisible = !locked && (controls || menuOpen || trackMenu !== null || settingsOpen || episodesOpen)
   const hold = useHoldSpeed(video, locked || Boolean(error) || settingsOpen || episodesOpen || menuOpen || trackMenu !== null)
 
@@ -119,23 +125,32 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
   }, [])
 
   const source = sources[sourceIndex]
-  const isEnglishTrack = (track: TrackOption) => {
-    const value = `${track.language ?? ''} ${track.label}`.toLowerCase()
-    return value === 'en' || value.startsWith('en ') || value.includes('english') || value.includes('(en)')
-  }
-  const isTurkishTrack = (track: TrackOption) => {
-    const value = `${track.language ?? ''} ${track.label}`.toLowerCase()
-    return value === 'tr' || value.startsWith('tr ') || value.includes('turkish') || value.includes('(tr)')
-  }
-  const englishSubtitles = subtitleTracks.filter(isEnglishTrack)
-  const turkishSubtitles = subtitleTracks.filter(isTurkishTrack)
-  const moreSubtitles = subtitleTracks.filter(
-    (track) => !englishSubtitles.some((english) => english.id === track.id) && !turkishSubtitles.some((turkish) => turkish.id === track.id),
-  )
-
+  const [externalSelection, setExternalSelection] = useState<{ source: string; url: string } | null>(null)
+  const externalSelected = source?.url === externalSelection?.source ? source?.subtitles?.find(track => track.url === externalSelection?.url) : undefined
+  const manualSubtitlePreference = useRef<{source: string; language: string} | null>(null)
+  const externalActive = useRef(false)
+  useEffect(() => { externalActive.current = Boolean(externalSelected) }, [externalSelected])
+  const externalError = useExternalSubtitles(video, externalSelected, source?.url)
+  const externalOptions = source?.subtitles?.map((track, index) => ({ id: 10000 + index, label: track.label, language: track.language })) ?? []
+  const visibleSubtitleTracks = [...subtitleTracks, ...externalOptions]
+  const visibleSubtitleTrack = externalSelected ? 10000 + (source?.subtitles?.indexOf(externalSelected) ?? 0) : subtitleTrack
+  useEffect(() => {
+    if (manualSubtitlePreference.current?.source === source?.url && manualSubtitlePreference.current?.language === preferences.subtitleLanguage) return
+    const track = source?.subtitles?.find(track => languageMatches(track.language, preferences.subtitleLanguage))
+    setExternalSelection(track && source ? { source: source.url, url: track.url } : null)
+  }, [source, preferences.subtitleLanguage])
+  useEffect(() => {
+    if (!externalSelected) return
+    if (hls.current) hls.current.subtitleTrack = -1
+    for (const track of Array.from(video.current?.textTracks ?? [])) {
+      if (!externalTextTracks.has(track) && (track.kind === 'subtitles' || track.kind === 'captions')) track.mode = 'disabled'
+    }
+    // oxlint-disable-next-line react/set-state-in-effect -- reflect the embedded track disabled on the media engine above.
+    setSubtitleTrack(-1)
+  }, [externalSelected])
   const trackLabel = (track: { name?: string; lang?: string; language?: string }, fallback: string) => {
     const language = track.lang ?? track.language
-    return track.name || language || fallback
+    return track.name || (language ? languageName(language) : fallback)
   }
 
   const toTrackOptions = (tracks: Array<{ name?: string; lang?: string; language?: string }>): TrackOption[] =>
@@ -148,7 +163,9 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
   const failOver = useCallback(
     (reason: string) => {
       if (video.current) resumeAt.current = video.current.currentTime || resumeAt.current
-      if (sourceIndex + 1 < sources.length) setSourceIndex(sourceIndex + 1)
+      if (source) failedSources.current.add(source.url)
+      const candidate = rankSources(sources, usePlaybackPreferences.getState()).find(item => !failedSources.current.has(item.url))
+      if (candidate) setSelectedSourceUrl(candidate.url)
       else {
         window.clearTimeout(sourceTimeout.current)
         hls.current?.stopLoad()
@@ -160,17 +177,18 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
         setControls(true)
       }
     },
-    [sourceIndex, sources.length],
+    [source, sources],
   )
 
   const retryStream = useCallback(() => {
     report()
     if (video.current?.currentTime) resumeAt.current = video.current.currentTime
+    if (source) failedSources.current.delete(source.url)
     setError(null)
     setEnded(false)
     setRecovering(true)
     setReload((value) => value + 1)
-  }, [report])
+  }, [report, source])
 
   useEffect(() => {
     const h = hls.current
@@ -178,7 +196,7 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
     const preferredAudio = h.audioTracks.findIndex((track) => languageMatches(track.lang, preferences.audioLanguage))
     const audio = preferredAudio >= 0 ? preferredAudio : Math.max(0, h.audioTracks.findIndex((track) => track.default))
     if (audio >= 0) { h.audioTrack = audio; setAudioTrack(audio) }
-    const subtitles = h.subtitleTracks.findIndex((track) => languageMatches(track.lang, preferences.subtitleLanguage))
+    const subtitles = externalActive.current ? -1 : h.subtitleTracks.findIndex((track) => languageMatches(track.lang, preferences.subtitleLanguage))
     h.subtitleTrack = subtitles
     setSubtitleTrack(subtitles)
   }, [preferences.audioLanguage, preferences.subtitleLanguage])
@@ -189,8 +207,8 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
     const sync = () => {
       if (hls.current) return
       const tracks = Array.from(media.textTracks).map((track, id) => ({ track, id }))
-        .filter(({ track }) => track.kind === 'subtitles' || track.kind === 'captions')
-      const selected = tracks.find(({ track }) => languageMatches(track.language, usePlaybackPreferences.getState().subtitleLanguage))?.id ?? -1
+        .filter(({ track }) => !externalTextTracks.has(track) && (track.kind === 'subtitles' || track.kind === 'captions'))
+      const selected = externalActive.current ? -1 : tracks.find(({ track }) => languageMatches(track.language, usePlaybackPreferences.getState().subtitleLanguage))?.id ?? -1
       tracks.forEach(({ track, id }) => {
         const mode = id === selected ? 'hidden' : 'disabled'
         if (track.mode !== mode) track.mode = mode
@@ -260,7 +278,6 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
     setSubtitleTracks([])
     setSubtitleTrack(-1)
     setTrackMenu(null)
-    setMoreSubtitlesOpen(false)
     armTimeout()
 
     if (isHlsSource(source)) {
@@ -294,7 +311,7 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
           const tracks = toTrackOptions(h.subtitleTracks)
           setSubtitleTracks(tracks)
           const preference = usePlaybackPreferences.getState().subtitleLanguage
-          const selected = tracks.find((track) => languageMatches(track.language, preference))?.id ?? -1
+          const selected = externalActive.current ? -1 : tracks.find((track) => languageMatches(track.language, preference))?.id ?? -1
           h.subtitleTrack = selected
           setSubtitleTrack(selected)
         }
@@ -429,7 +446,6 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
       setControls(false)
       setMenuOpen(false)
       setTrackMenu(null)
-      setMoreSubtitlesOpen(false)
     } else {
       showControls()
     }
@@ -489,19 +505,19 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
     hls.current.audioTrack = track.id
     if (track.language) preferences.update({ audioLanguage: track.language })
     setAudioTrack(track.id)
-    setTrackMenu(null)
   }
 
   function chooseSubtitleTrack(track: TrackOption | null) {
-    const id = track?.id ?? -1
+    if (source) manualSubtitlePreference.current = {source: source.url, language: track?.language ?? 'off'}
+    const external = track && track.id >= 10000 ? source?.subtitles?.[track.id - 10000] : undefined
+    setExternalSelection(external && source ? { source: source.url, url: external.url } : null)
+    const id = external ? -1 : track?.id ?? -1
     if (hls.current) hls.current.subtitleTrack = id
     else Array.from(video.current?.textTracks ?? []).forEach((item, index) => {
-      if (item.kind === 'subtitles' || item.kind === 'captions') item.mode = index === id ? 'hidden' : 'disabled'
+      if (!externalTextTracks.has(item) && (item.kind === 'subtitles' || item.kind === 'captions')) item.mode = index === id ? 'hidden' : 'disabled'
     })
     if (!track || track.language) preferences.update({ subtitleLanguage: track?.language ?? 'off' })
     setSubtitleTrack(id)
-    setTrackMenu(null)
-    setMoreSubtitlesOpen(false)
   }
 
   function onKey(e: React.KeyboardEvent) {
@@ -524,10 +540,8 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
     }
   }
 
-  const qualityOptions: QualityOption[] = hlsLevels.length
-    ? hlsLevels
-    : sources.map((s, i) => ({ label: s.quality ?? (s.type === 'hls' ? 'Auto' : `Source ${i + 1}`), value: i }))
-  const activeQuality = hlsLevels.length ? hlsLevel : sourceIndex
+  const qualityOptions: QualityOption[] = hlsLevels
+  const activeQuality = hlsLevel
   const showUpNext = next && duration > 0 && duration - time < UP_NEXT_SEC
 
   function revealLockHint() {
@@ -673,7 +687,7 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
         </div>
         <span className="player__spacer" />
         <button className="icon-btn" onClick={lockScreen} aria-label="Lock controls"><Icon name="lock" /></button>
-        <button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Playback settings"><Icon name="settings" /></button>
+        <button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Change server" aria-haspopup="dialog"><Icon name="settings" /></button>
       </div>
 
       <div className="player__center" inert={!controlsVisible || Boolean(error)}>
@@ -747,98 +761,28 @@ function StreamPlayer({ sources, title, subtitle, poster, startAt = 0, onBack, o
               )}
             </div>
           )}
-          {audioTracks.length > 1 && (
-            <div className="player__menu-wrap">
-                  <button
-                    className="icon-btn player__labelled"
-                    onClick={() => setTrackMenu((current) => (current === 'audio' ? null : 'audio'))}
-                    aria-haspopup="menu"
-                    aria-expanded={trackMenu === 'audio'}
-                    aria-label="Audio"
-                  >
-                    <Icon name="audio" /> <span>Audio</span>
-                  </button>
-                  {trackMenu === 'audio' && (
-                    <ul className="player__menu" role="menu" aria-label="Audio tracks">
-                      {audioTracks.map((track) => (
-                        <li key={track.id}>
-                          <button role="menuitemradio" aria-checked={track.id === audioTrack} onClick={() => chooseAudioTrack(track)}>
-                            {track.id === audioTrack && <Icon name="check" size={16} />} {track.label}
-                            {track.language && ` (${track.language})`}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-            </div>
-          )}
-          {subtitleTracks.length > 0 && (
-                <div className="player__menu-wrap">
-                  <button
-                    className="icon-btn player__labelled"
-                    onClick={() => setTrackMenu((current) => (current === 'subtitles' ? null : 'subtitles'))}
-                    aria-haspopup="menu"
-                    aria-expanded={trackMenu === 'subtitles'}
-                    aria-label="Subtitles"
-                  >
-                    <Icon name="captions" /> <span>CC</span>
-                  </button>
-                  {trackMenu === 'subtitles' && (
-                    <ul className="player__menu" role="menu" aria-label="Subtitle tracks">
-                      <li>
-                        <button role="menuitemradio" aria-checked={subtitleTrack === -1} onClick={() => chooseSubtitleTrack(null)}>
-                          {subtitleTrack === -1 && <Icon name="check" size={16} />} Off
-                        </button>
-                      </li>
-                      {englishSubtitles.map((track) => (
-                        <li key={track.id}>
-                          <button role="menuitemradio" aria-checked={track.id === subtitleTrack} onClick={() => chooseSubtitleTrack(track)}>
-                            {track.id === subtitleTrack && <Icon name="check" size={16} />} {track.label}
-                            {track.language && ` (${track.language})`}
-                          </button>
-                        </li>
-                      ))}
-                      {turkishSubtitles.map((track) => (
-                        <li key={track.id}>
-                          <button role="menuitemradio" aria-checked={track.id === subtitleTrack} onClick={() => chooseSubtitleTrack(track)}>
-                            {track.id === subtitleTrack && <Icon name="check" size={16} />} {track.label}
-                            {track.language && ` (${track.language})`}
-                          </button>
-                        </li>
-                      ))}
-                      {moreSubtitles.length > 0 && (
-                        <li>
-                          <button
-                            role="menuitem"
-                            aria-expanded={moreSubtitlesOpen}
-                            onClick={() => setMoreSubtitlesOpen((open) => !open)}
-                          >
-                            {moreSubtitlesOpen ? 'Less' : 'More'}
-                          </button>
-                          {moreSubtitlesOpen && (
-                            <ul className="player__menu player__menu--nested" role="group" aria-label="More subtitle tracks">
-                              {moreSubtitles.map((track) => (
-                                <li key={track.id}>
-                                  <button role="menuitemradio" aria-checked={track.id === subtitleTrack} onClick={() => chooseSubtitleTrack(track)}>
-                                    {track.id === subtitleTrack && <Icon name="check" size={16} />} {track.label}
-                                    {track.language && ` (${track.language})`}
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </li>
-                      )}
-                    </ul>
-                  )}
-                </div>
-              )}
+          <button className="icon-btn player__labelled" onClick={() => { setTrackMenu('audio'); setMenuOpen(false) }} aria-label="Audio and subtitles" aria-haspopup="dialog"><Icon name="captions" /><span>Audio & subtitles</span></button>
           <button className="icon-btn" onClick={toggleFullscreen} aria-label={fullscreen ? 'Exit full screen' : 'Full screen'}>
             <Icon name={fullscreen ? 'exitFullscreen' : 'fullscreen'} />
           </button>
         </div>
       </div>
-      {settingsOpen && <PlaybackSettings onClose={() => { setSettingsOpen(false); showControls() }} />}
+      {settingsOpen && <PlayerPanel title="Change server" variant="playback" onClose={() => { setSettingsOpen(false); showControls() }}>
+        <p className="player__panel-note">Choose a provider, then a server. Your playback position is kept.</p>
+        <p className="player__selection-summary">Audio: {audioTracks.find(track => track.id === audioTrack)?.label ?? 'Stream default'} &middot; Subtitles: {visibleSubtitleTracks.find(track => track.id === visibleSubtitleTrack)?.label ?? 'Off'}</p>
+        <ServerChoices sources={sources} active={source} onSelect={item => {
+          resumeAt.current = video.current?.currentTime || resumeAt.current
+          if (item.url === source?.url && error) retryStream()
+          else setSelectedSourceUrl(item.url)
+          setSettingsOpen(false); showControls()
+        }} />
+        {sources.length <= 1 && <p className="player__panel-note">{sources.length ? 'Only one stream is available for this episode or movie.' : 'No providers are available.'}</p>}
+      </PlayerPanel>}
+      {trackMenu && <PlayerPanel title="Audio & subtitles" variant="languages" onClose={() => { setTrackMenu(null); showControls() }}>
+        <p className="player__selection-summary">{source?.provider ?? 'Current stream'} &middot; Audio: {audioTracks.find(track => track.id === audioTrack)?.label ?? 'Stream default'} &middot; Subtitles: {visibleSubtitleTracks.find(track => track.id === visibleSubtitleTrack)?.label ?? 'Off'}</p>
+        <LanguageChoices audio={audioTracks} subtitles={visibleSubtitleTracks} audioId={audioTrack} subtitleId={visibleSubtitleTrack} onAudio={chooseAudioTrack} onSubtitle={chooseSubtitleTrack} error={externalError} />
+        <footer className="player__language-footer"><span>Language choices are saved for your profile.</span><button onClick={() => { setTrackMenu(null); setSettingsOpen(true) }}>Change server <Icon name="chevron" size={16} /></button></footer>
+      </PlayerPanel>}
       {episodesOpen && episodes && <EpisodePicker {...episodes} onClose={() => { setEpisodesOpen(false); showControls() }} onSelect={(selectedSeason, selectedEpisode) => {
         report(); hold.stop(); setEpisodesOpen(false); episodes.onSelect(selectedSeason, selectedEpisode)
       }} />}

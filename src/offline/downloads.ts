@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { getCineProSources } from '../providers/cinepro'
-import { usePlaybackPreferences } from '../state/playback'
+import { getPlaybackPreferences } from '../state/playback'
 import { attributes, selectMaster, validateMedia } from './playlist'
 import { clearFiles, deleteDownload, listDownloads, offlineUrl, saveDownload, saveFile, type Download } from './storage'
 import { NativeDownloads, nativeDownloads } from './nativeDownloads'
@@ -92,8 +92,8 @@ export async function startDownload(input: Pick<Download, 'id' | 'profileId' | '
     if (useDownloads.getState().error || useDownloads.getState().items.some((item) => item.id === input.id && item.status !== 'error')) return
     const item: Download = { ...input, status: 'queued', bytes: 0, completed: 0, total: 0, createdAt: Date.now(), queuedAt: Date.now() }
     if (nativeDownloads) {
-      const [source] = await getCineProSources(item.title.mediaType, item.title.id, item.season, item.episode)
-      const prefs = usePlaybackPreferences.getState()
+      const [source] = await getCineProSources(item.title.mediaType, item.title.id, item.season, item.episode, undefined, getPlaybackPreferences(item.profileId))
+      const prefs = getPlaybackPreferences(item.profileId)
       await NativeDownloads.enqueue({ item: { ...item, backend: 'native' }, url: source.url, audio: prefs.audioLanguage, subtitles: prefs.subtitleLanguage })
       await deleteDownload(item.id)
       await refreshNative()
@@ -133,8 +133,8 @@ async function downloadWeb(input: Download) {
     await navigator.storage?.persist?.().catch(() => false)
     await clearFiles(item.id)
     await saveDownload(item)
-    const [source] = await getCineProSources(item.title.mediaType, item.title.id, item.season, item.episode)
-    const preferences = usePlaybackPreferences.getState()
+    const [source] = await getCineProSources(item.title.mediaType, item.title.id, item.season, item.episode, undefined, getPlaybackPreferences(item.profileId))
+    const preferences = getPlaybackPreferences(item.profileId)
     const resources = new Map<string, string>()
     const playlists = new Map<string, string>()
     const visiting = new Set<string>()

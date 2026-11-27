@@ -1,6 +1,8 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { getTitle } from '../providers'
 import type { MediaType } from '../providers'
+import { usePlaybackPreferences } from '../state/playback'
+import { useProfiles } from '../state/profiles'
 import { getCineProSources } from '../providers/cinepro'
 import { fetchList, getEpisodeVideos, getRecommendations, getSeason, searchTitles } from '../providers/tmdb'
 import type { RowDef } from './rows'
@@ -47,9 +49,14 @@ export function useCineProSources(
   season?: number,
   episode?: number,
 ) {
+  const profileId = useProfiles((state) => state.activeId)
   return useQuery({
-    queryKey: ['cinepro-sources', mediaType, tmdbId, season, episode],
-    queryFn: ({ signal }) => getCineProSources(mediaType!, tmdbId!, season, episode, signal),
+    queryKey: ['cinepro-sources', profileId, mediaType, tmdbId, season, episode],
+    // A background refresh may rotate signed URLs and invalidate a manual choice.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    gcTime: 0,
+    queryFn: ({ signal }) => getCineProSources(mediaType!, tmdbId!, season, episode, signal, usePlaybackPreferences.getState()),
     enabled: Boolean(mediaType && tmdbId && (mediaType === 'movie' || (season !== undefined && episode !== undefined))),
   })
 }

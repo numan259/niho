@@ -59,6 +59,29 @@ afterEach(() => {
 })
 
 describe('stream player interaction', () => {
+  it('selects a language match, respects manual choice, and never loops through failed URLs', () => {
+    unmountPlayer()
+    act(() => usePlaybackPreferences.getState().update({ audioLanguage: 'tr' }))
+    render(<VideoPlayer sources={[
+      { type: 'mp4', url: '/english.mp4', audioLanguages: ['en'], quality: 'English' },
+      { type: 'mp4', url: '/turkish.mp4', audioLanguages: ['tr'], quality: 'Turkish' },
+      { type: 'mp4', url: '/unknown.mp4', quality: 'Unknown' },
+    ]} title="Languages" onBack={vi.fn()} onProgress={vi.fn()} onEnded={vi.fn()} />)
+    const player = document.querySelector('video')!
+    expect(player.src).toContain('/turkish.mp4')
+    fireEvent.click(screen.getByRole('button', { name: 'Change server' }))
+    fireEvent.click(screen.getByRole('button', { name: /Other sources/ }))
+    fireEvent.click(screen.getByRole('button', { name: /English/ }))
+    expect(player.src).toContain('/english.mp4')
+    act(() => usePlaybackPreferences.getState().update({ subtitleLanguage: 'ja' }))
+    expect(player.src).toContain('/english.mp4')
+    fireEvent.error(player)
+    expect(player.src).toContain('/turkish.mp4')
+    fireEvent.error(player)
+    expect(player.src).toContain('/unknown.mp4')
+    fireEvent.error(player)
+    expect(screen.getByRole('button', { name: 'Retry playback' })).toBeVisible()
+  })
   it('reveals hidden controls on a single tap without pausing or seeking', () => {
     act(() => vi.advanceTimersByTime(3000))
     expect(region).not.toHaveClass('player--controls')

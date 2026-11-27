@@ -1,4 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { PlaybackSettings } from '../ui/player/PlaybackSettings'
 import { continueWatching, useLibrary } from '../state/library'
 import { useActiveProfile, useProfiles } from '../state/profiles'
 import { ContinueCard, TitleCard } from '../ui/cards'
@@ -9,6 +11,7 @@ import { Row } from '../ui/sections/Row'
 import { Message } from '../ui/States'
 
 export default function My() {
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const profile = useActiveProfile()!
   const select = useProfiles((s) => s.select)
   const lib = useLibrary()
@@ -57,6 +60,8 @@ export default function My() {
         )}
       </section>
 
+      {settingsOpen && <PlaybackSettings onClose={() => setSettingsOpen(false)} />}
+      <button className="btn btn--secondary" onClick={() => setSettingsOpen(true)}>Playback settings</button>
       <nav className="my__links" aria-label="Profile menu">
         <Link to="/downloads" className="my__link">
           <Icon name="download" /> Downloads

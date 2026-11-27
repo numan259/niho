@@ -6,6 +6,11 @@ export interface Source {
   type: 'mp4' | 'hls' | 'youtube'
   /** Label shown in the player's source menu, e.g. "Official Trailer" or "720p" */
   quality?: string
+  provider?: string
+  /** Explicit available languages; omitted = unknown, [] = known none. */
+  audioLanguages?: string[]
+  subtitleLanguages?: string[]
+  subtitles?: { url: string; format: 'vtt'; label: string; language?: string }[]
 }
 
 /** A trailer / teaser / clip as listed by TMDB (hosted on YouTube). */

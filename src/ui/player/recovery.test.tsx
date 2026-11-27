@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi, type Mock } from 'vitest'
 import { VideoPlayer } from './VideoPlayer'
 import { DEFAULT_PLAYBACK, usePlaybackPreferences } from '../../state/playback'
@@ -101,4 +101,18 @@ it('preserves the subtitle preference when hls.js resets its default after a tra
     stream.subtitleTrack = -1
   })
   expect(stream.subtitleTrack).toBe(0)
+})
+
+it('selects and remembers audio and subtitles from the combined panel', () => {
+  fireEvent.click(screen.getByRole('button', { name: 'Audio and subtitles' }))
+  fireEvent.click(within(screen.getByRole('region', {name: 'Audio tracks'})).getByRole('button', { name: 'Turkish' }))
+  expect(state.instances[0].audioTrack).toBe(1)
+  expect(usePlaybackPreferences.getState().audioLanguage).toBe('tr')
+  fireEvent.click(within(screen.getByRole('region', {name: 'Subtitle tracks'})).getByRole('button', { name: 'English' }))
+  expect(state.instances[0].subtitleTrack).toBe(0)
+  expect(usePlaybackPreferences.getState().subtitleLanguage).toBe('en')
+  fireEvent.click(screen.getByRole('button', { name: 'Close panel' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Change server' }))
+  expect(screen.getByRole('dialog', { name: 'Change server' })).toBeVisible()
+  expect(screen.queryByLabelText('Preferred audio')).not.toBeInTheDocument()
 })
